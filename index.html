@@ -1,0 +1,1425 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>张力围栏 · 多设备成本清单工具</title>
+<meta name="viewport" content="width=1280" />
+<style>
+  :root{
+    --bg:#f5f7fb; --panel:#fff; --line:#e3e7ef; --ink:#1f2937; --muted:#6b7280;
+    --brand:#2563eb; --brand-2:#1d4ed8; --ok:#16a34a; --warn:#d97706; --bad:#dc2626;
+    --soft:#eef2ff; --yellow:#fff7d6; --green:#e8f5ea;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Arial,sans-serif;
+    font-size:13px;line-height:1.5}
+  header{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line);
+    padding:10px 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;color:var(--brand-2)}
+  header .stat{display:inline-flex;align-items:baseline;gap:6px;padding:4px 10px;
+    background:var(--soft);border-radius:6px;font-variant-numeric:tabular-nums}
+  header .stat b{font-size:15px;color:var(--brand-2)}
+  header .stat.grand{background:#fee2e2}
+  header .stat.grand b{color:#b91c1c;font-size:17px}
+  header .mode{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  header .mode button{border:none;background:#fff;padding:5px 12px;cursor:pointer;font-size:12.5px;
+    color:var(--muted)}
+  header .mode button.on{background:var(--brand);color:#fff}
+  header .mode button:not(.on):hover{background:var(--soft);color:var(--brand)}
+  header .spacer{flex:1}
+  header button.act{padding:6px 12px;border:1px solid var(--line);background:#fff;border-radius:6px;
+    cursor:pointer;font-size:13px}
+  header button.act:hover{background:var(--soft);border-color:var(--brand)}
+  header button.act.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+  header button.act.primary:hover{background:var(--brand-2)}
+
+  main{display:grid;grid-template-columns:360px 1fr;gap:14px;padding:14px}
+
+  /* ===== Sidebar ===== */
+  aside{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:10px 12px;height:fit-content;position:sticky;top:62px;max-height:calc(100vh - 78px);
+    overflow:auto}
+  aside h2{font-size:13px;margin:10px 0 6px;color:var(--brand-2);
+    border-left:3px solid var(--brand);padding-left:8px;display:flex;align-items:center;gap:6px}
+  aside h2:first-child{margin-top:2px}
+  aside h2 .key-hint{color:var(--muted);font-size:11px;font-weight:400}
+  .field{display:grid;grid-template-columns:1fr 92px;gap:6px;align-items:center;
+    margin:4px 0;font-size:12.5px}
+  .field label{color:var(--ink);overflow:hidden;text-overflow:ellipsis}
+  .field code{background:var(--soft);color:var(--brand);padding:0 4px;border-radius:3px;
+    font-size:11px;margin-right:4px;font-family:Menlo,Consolas,monospace}
+  .field .unit{color:var(--muted);font-size:11.5px;margin-left:4px}
+  .field input{width:100%;padding:4px 6px;border:1px solid var(--line);border-radius:5px;
+    font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums;background:var(--yellow)}
+  .field input:focus{outline:none;border-color:var(--brand);background:#fffef2}
+  .field input[readonly]{background:var(--green);color:#15803d;font-weight:600}
+  .cparam{display:grid;grid-template-columns:64px 1fr 70px 24px;gap:4px;align-items:center;
+    margin:4px 0;font-size:12.5px}
+  .cparam input{padding:3px 5px;border:1px solid var(--line);border-radius:4px;font-size:12px}
+  .cparam input.k{background:#f0f7ff;color:var(--brand-2);font-family:Menlo,Consolas,monospace}
+  .cparam input.l{background:#fff}
+  .cparam input.v{background:var(--yellow);text-align:right;font-variant-numeric:tabular-nums}
+  .cparam input.u{background:#fff;color:var(--muted);font-size:11px}
+  .cparam input:focus{outline:none;border-color:var(--brand)}
+  .add-line{margin:6px 0;padding:6px;border:1.5px dashed var(--line);border-radius:5px;
+    text-align:center;color:var(--muted);cursor:pointer;font-size:12px;background:#fafbfd}
+  .add-line:hover{border-color:var(--brand);color:var(--brand);background:var(--soft)}
+
+  /* equipment list */
+  .equip-row{border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin:5px 0;
+    background:#fafbfd;cursor:pointer;transition:all .15s}
+  .equip-row:hover{border-color:var(--brand);background:var(--soft)}
+  .equip-row.on{border-color:var(--brand);background:#e7f0ff;box-shadow:0 0 0 1px var(--brand)}
+  .equip-row .e-top{display:flex;align-items:center;gap:6px}
+  .equip-row .e-radio{width:14px;height:14px;border:2px solid var(--line);border-radius:50%;
+    flex-shrink:0;background:#fff}
+  .equip-row.on .e-radio{border-color:var(--brand);background:radial-gradient(circle, var(--brand) 0 4px, transparent 4px)}
+  .equip-row .e-name{flex:1;border:none;background:transparent;font-size:12.5px;font-weight:600;
+    color:var(--ink);padding:1px 2px;border-radius:3px;min-width:0}
+  .equip-row .e-name:hover{background:rgba(0,0,0,.03)}
+  .equip-row .e-name:focus{outline:none;background:#fff;box-shadow:0 0 0 1px var(--brand)}
+  .equip-row .e-act{display:inline-flex;gap:2px}
+  .equip-row .e-act button{border:none;background:transparent;cursor:pointer;font-size:13px;
+    color:var(--muted);padding:1px 4px;border-radius:3px}
+  .equip-row .e-act button:hover{background:#fff;color:var(--brand)}
+  .equip-row .e-act button.danger:hover{color:var(--bad);background:#fee2e2}
+  .equip-row .e-meta{font-size:11px;color:var(--muted);margin-top:3px;display:flex;
+    align-items:center;gap:8px;font-variant-numeric:tabular-nums}
+  .equip-row .e-meta .sets{display:inline-flex;align-items:center;gap:3px}
+  .equip-row .e-meta .sets input{width:36px;padding:1px 3px;border:1px solid var(--line);
+    border-radius:3px;background:var(--yellow);text-align:right;font-size:11px}
+  .equip-row .e-meta .sets input:focus{outline:none;border-color:var(--brand)}
+  .equip-row .e-meta select.e-mode{padding:1px 4px;border:1px solid var(--line);border-radius:3px;
+    font-size:11px;background:#fff;color:var(--brand-2);cursor:pointer}
+  .equip-row .e-meta select.e-mode:focus{outline:none;border-color:var(--brand)}
+
+  /* zone list */
+  .zone-head{font-size:11px;color:var(--muted);margin:4px 0 2px;display:grid;
+    grid-template-columns:1fr 70px 30px 24px;gap:4px}
+  .zone-row{display:grid;grid-template-columns:1fr 70px 30px 24px;gap:4px;align-items:center;
+    margin:3px 0;font-size:12.5px}
+  .zone-row input{padding:3px 5px;border:1px solid var(--line);border-radius:4px;font-size:12px}
+  .zone-row .zname{background:#fff}
+  .zone-row .zlen{background:var(--yellow);text-align:right;font-variant-numeric:tabular-nums}
+  .zone-row .zunit{color:var(--muted);font-size:11.5px}
+  .zone-row input:focus{outline:none;border-color:var(--brand)}
+  .zone-sum{margin:6px 0;padding:6px 8px;background:var(--green);border-radius:5px;
+    font-size:11.5px;color:#166534;line-height:1.6}
+  .zone-sum table{width:100%;font-size:11.5px}
+  .zone-sum td{padding:1px 4px;border:none}
+  .zone-sum td.zk{color:#15803d}
+  .zone-sum td.zv{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+
+  /* ===== Main content ===== */
+  section.bom{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:8px 4px 16px;overflow:auto}
+  .cat{border-top:6px solid var(--soft);margin-top:10px;padding:6px 12px 0}
+  .cat:first-child{border-top:none;margin-top:0}
+  .cat h3{font-size:14px;color:var(--brand-2);margin:8px 0 6px;display:flex;align-items:baseline;
+    gap:8px}
+  .cat h3 .tag{font-size:11px;padding:1px 6px;border-radius:3px;background:var(--soft);
+    color:var(--brand);font-weight:500}
+  .cat h3 .tag.opt{background:#fef3c7;color:var(--warn)}
+  .cat h3 .tag.cus{background:#dcfce7;color:var(--ok)}
+  .cat .sub{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .cat .sub b{color:var(--brand-2);font-size:13px}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{border-bottom:1px solid #eef0f5;padding:5px 8px;text-align:left;vertical-align:middle}
+  th{background:#fafbfd;color:var(--muted);font-weight:500;font-size:12px;position:sticky;top:0}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  td.idx{color:var(--muted);width:38px}
+  td.unit{color:var(--muted);width:42px}
+  td.qty{width:106px}
+  td.price{width:96px}
+  td.sub{width:104px;font-weight:600;color:var(--brand-2)}
+  td.del{width:34px;text-align:center}
+  td.note{color:var(--muted);font-size:11.5px;max-width:220px}
+  td .price-in{width:100%;padding:3px 5px;border:1px solid var(--line);border-radius:4px;
+    text-align:right;font-variant-numeric:tabular-nums;background:var(--yellow);font-size:12.5px}
+  td .price-in:focus{outline:none;border-color:var(--brand);background:#fffef2}
+  td .text-in{width:100%;padding:3px 5px;border:1px solid var(--line);border-radius:4px;
+    font-size:12.5px;background:#f0f7ff}
+  td .text-in:focus{outline:none;border-color:var(--brand);background:#e7f0ff}
+  .qty-cell{display:flex;align-items:center;gap:4px;justify-content:flex-end}
+  .qty-cell .qval{flex:1;text-align:right}
+  .fx-btn{border:1px solid var(--line);background:#fff;color:var(--brand);
+    padding:1px 6px;border-radius:4px;cursor:pointer;font-size:11px;font-family:Menlo,Consolas,monospace}
+  .fx-btn:hover{background:var(--soft);border-color:var(--brand)}
+  .fx-btn.modified{background:#fff7d6;border-color:var(--warn);color:var(--warn)}
+  tr.changed td.price-in-cell{background:#fffbe6}
+  tr.custom-row{background:#f7fbff}
+  tr.custom-row td.idx{color:var(--ok);font-weight:600}
+  tr.fx-modified td.qval{color:var(--warn);font-weight:600}
+  td.qval-break{font-size:11px;color:var(--muted);cursor:help}
+  td.qval-break:hover{color:var(--brand)}
+  .add-row{margin:8px 12px;padding:8px 12px;border:1.5px dashed var(--line);border-radius:6px;
+    text-align:center;color:var(--muted);cursor:pointer;background:#fafbfd}
+  .add-row:hover{border-color:var(--brand);color:var(--brand);background:var(--soft)}
+  .del-btn{border:none;background:transparent;color:var(--bad);cursor:pointer;font-size:15px;
+    padding:2px 4px;border-radius:3px}
+  .del-btn:hover{background:#fee2e2}
+
+  .bom-banner{padding:10px 14px;margin:6px 6px 0;background:var(--soft);border:1px solid #c7d2fe;
+    border-radius:6px;font-size:12.5px;color:var(--brand-2);display:flex;align-items:center;gap:10px}
+  .bom-banner b{font-size:13px}
+  .bom-banner .badge{background:#fff;color:var(--brand);padding:1px 7px;border-radius:10px;
+    font-size:11px;font-weight:600}
+
+  footer{padding:14px 18px;color:var(--muted);font-size:12px;text-align:center}
+
+  /* ===== Formula Editor Modal ===== */
+  .modal{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:100;
+    display:flex;align-items:center;justify-content:center;padding:20px}
+  .modal.hidden{display:none}
+  .modal-card{background:#fff;border-radius:10px;max-width:760px;width:100%;
+    box-shadow:0 24px 64px rgba(0,0,0,.25);max-height:90vh;display:flex;flex-direction:column}
+  .modal-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start}
+  .modal-title{font-size:15px;font-weight:600;color:var(--brand-2)}
+  .modal-sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .x-btn{border:none;background:transparent;font-size:22px;color:var(--muted);cursor:pointer;
+    line-height:1;padding:0 4px;margin-left:auto}
+  .x-btn:hover{color:var(--bad)}
+  .modal-body{padding:14px 18px;overflow:auto;flex:1}
+  .fx-input-row{display:grid;grid-template-columns:80px 1fr;gap:10px;align-items:center;margin-bottom:8px}
+  .fx-input-row label{color:var(--muted);font-size:12px}
+  #fxInput{width:100%;padding:8px 10px;border:1.5px solid var(--brand);border-radius:6px;
+    font-family:Menlo,Consolas,"PingFang SC",monospace;font-size:13px;background:#fffef2}
+  #fxInput:focus{outline:none;border-color:var(--brand-2);background:#fff}
+  .fx-result-row{display:flex;align-items:center;gap:8px;margin:6px 0 12px;font-size:13px}
+  .fx-result-row b{color:var(--ok);font-size:16px;font-variant-numeric:tabular-nums}
+  .fx-err{color:var(--bad);font-size:12px}
+  .fx-help{background:#fafbfd;border:1px solid var(--line);border-radius:6px;padding:8px 10px;
+    font-size:11.5px;color:var(--muted)}
+  .fx-help code{background:#fff;color:var(--brand-2);padding:0 4px;border-radius:3px;
+    font-family:Menlo,Consolas,monospace}
+  .fx-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;max-height:240px;overflow:auto}
+  .fx-chip{border:1px solid var(--line);background:#fff;padding:3px 8px;border-radius:14px;
+    cursor:pointer;font-size:11.5px;font-family:Menlo,Consolas,monospace;color:var(--brand-2);
+    display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+  .fx-chip:hover{border-color:var(--brand);background:var(--soft)}
+  .fx-chip .lab{color:var(--muted);font-family:inherit;font-size:11px}
+  .fx-chip.derived{background:var(--green);color:#15803d}
+  .fx-chip.custom{background:#dcfce7;color:#166534}
+  .fx-actions{padding:12px 18px;border-top:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .fx-actions button{padding:6px 14px;border:1px solid var(--line);background:#fff;border-radius:6px;
+    cursor:pointer;font-size:13px}
+  .fx-actions button:hover{background:var(--soft)}
+  .fx-actions button.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .fx-actions button.primary:hover{background:var(--brand-2)}
+  .fx-actions button.danger{color:var(--bad);border-color:#fecaca}
+  .fx-actions button.danger:hover{background:#fee2e2}
+
+  @media print{
+    header{position:static}
+    aside{display:none}
+    main{grid-template-columns:1fr;padding:0}
+    section.bom{border:none}
+    .add-row,.del-btn,.fx-btn{display:none}
+    td .price-in{border:none;background:transparent;padding:0}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>张力围栏 · 多设备成本工具</h1>
+  <span class="stat">设备数 <b id="kEquipCount">—</b></span>
+  <span class="stat">总套数 <b id="kSetsAll">—</b></span>
+  <span class="stat">围栏总长 <b id="kTotalLen">—</b> m</span>
+  <span class="stat">主螺旋柱 <b id="kMainPoles">—</b> 根</span>
+  <span class="stat grand">总价 ¥<b id="kGrand">—</b></span>
+  <span class="mode" id="modeSwitch">
+    <button data-mode="aggregate">📊 全部设备汇总</button>
+    <button data-mode="single">🔍 单设备视图</button>
+  </span>
+  <span class="spacer"></span>
+  <button id="btnExport" class="act primary">导出 CSV</button>
+  <button id="btnPrint"  class="act">打印</button>
+  <button id="btnReset"  class="act">重置</button>
+</header>
+
+<main>
+  <aside id="params"></aside>
+  <section class="bom" id="bom"></section>
+</main>
+
+<footer>
+  数据基于"双防区张力围栏 BOM 清单_30 线_V5"。<b>每台设备 = 你要卖出的一套设备</b>，左侧"设备列表"可任意添加/重命名/调整其防区与套数；
+  右侧 BOM 默认"全部设备汇总"显示真实总用量，切换到"单设备视图"可查看某一台设备的明细。
+  <br>BOM 任意行右侧 <code>ƒ</code> 按钮可编辑数量公式（变量含 <code>zoneLen1..N</code>、<code>totalZoneLen</code>、<code>sets</code> 及自定义参数）。
+</footer>
+
+<!-- 公式编辑器 -->
+<div id="fxModal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="fxTitle">编辑数量公式</div>
+        <div class="modal-sub" id="fxSub"></div>
+      </div>
+      <button class="x-btn" id="fxClose">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="fx-input-row">
+        <label>数量公式</label>
+        <input id="fxInput" type="text" spellcheck="false" autocomplete="off">
+      </div>
+      <div class="fx-result-row">
+        <span>当前设备结果：</span><b id="fxResult">—</b>
+        <span id="fxError" class="fx-err"></span>
+        <span style="flex:1"></span>
+        <span class="fx-help" style="border:none;padding:0;background:transparent">
+          默认公式：<code id="fxDefault" style="background:#eef2ff"></code>
+        </span>
+      </div>
+      <div class="fx-help">
+        <div>点击下方变量插入到公式中。可用函数：<code>ceil</code> <code>floor</code> <code>round</code> <code>max</code> <code>min</code> <code>abs</code> <code>sqrt</code> <code>pow</code></div>
+        <div id="fxVars" class="fx-chips"></div>
+      </div>
+    </div>
+    <div class="fx-actions">
+      <button id="fxReset" class="danger">恢复默认公式</button>
+      <span style="flex:1"></span>
+      <button id="fxCancel">取消</button>
+      <button id="fxSave" class="primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================
+ *  默认参数（共享给所有设备的产品规格）
+ * ========================================================= */
+const DEFAULT_PARAMS = {
+  mainSpacing:     { v:3,   u:"米",     g:"main", label:"主螺旋柱间距" },
+  mainULocks:      { v:6,   u:"个/柱",  g:"main", label:"主螺旋柱U型锁扣" },
+  vertSupports:    { v:3,   u:"个/柱",  g:"main", label:"垂直段螺旋杆支架" },
+  slopeSupports:   { v:1,   u:"个/柱",  g:"main", label:"斜支撑段螺旋杆支架" },
+  squareSupports:  { v:1,   u:"个/柱",  g:"main", label:"斜支撑螺旋杆支架(方孔)" },
+  auxULocks:       { v:6,   u:"个/柱",  g:"main", label:"辅助螺旋柱U型锁扣" },
+  vertLines:       { v:19,  u:"线",     g:"line", label:"垂直段线数" },
+  slopeLines:      { v:5,   u:"线",     g:"line", label:"斜支撑段线数" },
+  lineRedundancy:  { v:1.2, u:"倍",     g:"line", label:"线材冗余系数" },
+  pillarsPerZone:  { v:1,   u:"根",     g:"det",  label:"每组双防区共用探测器柱数" },
+  pillarULocks:    { v:2,   u:"个/线",  g:"det",  label:"探测器柱U型锁扣(张力刺丝限位)" },
+  pillarULockBush: { v:2,   u:"个/锁扣",g:"det",  label:"U型锁扣轴套" },
+  pillarVertSlope: { v:2,   u:"个/线",  g:"det",  label:"探测器柱垂直段支架(斜坡段)" },
+  pillarSlopeSlope:{ v:2,   u:"个/线",  g:"det",  label:"探测器柱斜支撑支架(斜坡段)" },
+  horizCorners:    { v:1,   u:"根",     g:"end",  label:"水平转角滑轮柱数量" },
+  slopeCorners:    { v:1,   u:"根",     g:"end",  label:"变坡转角滑轮柱数量" },
+  anchorPosts:     { v:2,   u:"根",     g:"end",  label:"终端锚柱数量" },
+};
+const GROUPS = {
+  equip:"设备列表",
+  base: "当前设备的防区",
+  main: "立柱间距与配置（共享）",
+  line: "线材配置（共享）",
+  det:  "探测器柱配置（共享）",
+  end:  "转角与终端（共享）",
+};
+const DERIVED_VARS = ["totalLen","totalLines","mainPoles","totalZoneLen","zoneCount","sets","zonesPerPillar"];
+const HELPER_NAMES = ["ceil","floor","round","max","min","abs","sqrt","pow"];
+const HELPER_FNS   = [Math.ceil, Math.floor, Math.round, Math.max, Math.min, Math.abs, Math.sqrt, Math.pow];
+const RESERVED = new Set([
+  ...Object.keys(DEFAULT_PARAMS), ...DERIVED_VARS, ...HELPER_NAMES,
+  "leftLen","rightLen",
+  "Math","Number","String","Boolean","Array","Object","Infinity","NaN","undefined","null","true","false"
+]);
+
+function uid(){ return "e" + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+const DEFAULT_ZONES = [
+  {name:"左防区", length:40},
+  {name:"右防区", length:40},
+];
+function defaultEquipment(idx){
+  return { id: uid(), name: `设备 ${idx||1}`, sets: 1, mode: "double",
+           zones: DEFAULT_ZONES.map(z=>({...z})) };
+}
+function zonesPerPillarOf(equip){ return equip && equip.mode === "single" ? 1 : 2; }
+
+/* =========================================================
+ *  BOM 数据（formula = 可编辑的数量公式字符串）
+ * ========================================================= */
+const BOM = [
+  /* ===== 一、探测器柱组件 ===== */
+  { sec:"一、探测器柱组件", type:"std", name:"探测器柱垂直段", spec:"304不锈钢，与斜撑135°焊接成型", unit:"件", formula:"pillarsPerZone * sets", price:451, note:"[昆山创思协尔]" },
+  { sec:"一、探测器柱组件", type:"std", name:"探测器柱斜撑段", spec:"304不锈钢，135°斜撑段", unit:"件", formula:"pillarsPerZone * sets", price:159, note:"[昆山创思协尔]" },
+  { sec:"一、探测器柱组件", type:"std", name:"上盖板", spec:"304不锈钢冲压件", unit:"件", formula:"pillarsPerZone * sets", price:122, note:"[昆山创思协尔]" },
+  { sec:"一、探测器柱组件", type:"std", name:"下盖板", spec:"304不锈钢，含柱底固定结构", unit:"件", formula:"pillarsPerZone * sets", price:313.5, note:"[昆山创思协尔]" },
+  { sec:"一、探测器柱组件", type:"std", name:"触发器", spec:"按现场规格定制(沿用现役款)", unit:"个", formula:"pillarsPerZone * zonesPerPillar * sets", price:10, note:"双防区2个/单防区1个" },
+  { sec:"一、探测器柱组件", type:"std", name:"触发器放大片", spec:"304钣金，触发器用", unit:"片", formula:"pillarsPerZone * 5 * sets", price:0.8, note:"[九院物料采购跟踪表]" },
+  { sec:"一、探测器柱组件", type:"std", name:"触发器放大片固定扣", spec:"放大片固定用", unit:"个", formula:"pillarsPerZone * 8 * sets", price:0.058, note:"[九院物料采购跟踪表]" },
+  { sec:"一、探测器柱组件", type:"std", name:"拉力传感器", spec:"100Kg量程/万分之3精度，76.2×50.8×19mm", unit:"个", formula:"pillarsPerZone * zonesPerPillar * sets", price:90, note:"双防区2个/单防区1个" },
+  { sec:"一、探测器柱组件", type:"std", name:"蜂鸣器", spec:"有源直流DC12V/22mm", unit:"个", formula:"pillarsPerZone * zonesPerPillar * sets", price:15.45, note:"双防区2个/单防区1个" },
+  { sec:"一、探测器柱组件", type:"std", name:"钢丝绳锁扣(入侵报警)", spec:"适用1mm-1.5mm钢丝绳", unit:"个", formula:"pillarsPerZone * 2 * zonesPerPillar * sets", price:2.81, note:"双防区4个/单防区2个" },
+  { sec:"一、探测器柱组件", type:"std", name:"钢丝绳锁扣(断线报警)", spec:"适用1.5mm-2mm钢丝绳", unit:"个", formula:"pillarsPerZone * zonesPerPillar * sets", price:5.78, note:"双防区2个/单防区1个" },
+  { sec:"一、探测器柱组件", type:"std", name:"销轴 M5×75", spec:"304不锈钢", unit:"个", formula:"pillarsPerZone * 1 * sets", price:0.83, note:"[绵阳实采清单]" },
+  { sec:"一、探测器柱组件", type:"std", name:"销轴 M6×75", spec:"304不锈钢", unit:"个", formula:"pillarsPerZone * 1 * sets", price:0.96, note:"[绵阳实采清单]" },
+  { sec:"一、探测器柱组件", type:"std", name:"传感器锁线螺栓", spec:"M12拉力头/可穿2-3mm钢丝绳", unit:"个", formula:"pillarsPerZone * 2 * zonesPerPillar * sets", price:2.97, note:"双防区4个/单防区2个" },
+  { sec:"一、探测器柱组件", type:"std", name:"紧线螺栓", spec:"M6×40 孔3.2mm，304", unit:"个", formula:"pillarsPerZone * 3 * sets", price:6.07, note:"[绵阳实采清单]" },
+  { sec:"一、探测器柱组件", type:"std", name:"V型导轮", spec:"V型特小号2孔架，304", unit:"个", formula:"pillarsPerZone * zonesPerPillar * sets", price:14, note:"双防区2个/单防区1个" },
+  { sec:"一、探测器柱组件", type:"std", name:"轴套 Ø5×8×18", spec:"304不锈钢", unit:"个", formula:"pillarULockBush * pillarULocks * totalLines * sets", price:0.63, note:"[绵阳实采清单]" },
+  { sec:"一、探测器柱组件", type:"std", name:"U型锁扣（张力刺丝限位锁扣）", spec:"304不锈钢", unit:"个", formula:"pillarULocks * totalLines * sets", price:1.5, note:"[绵阳实采清单]" },
+  { sec:"一、探测器柱组件", type:"std", name:"柱体安装费", spec:"探测器柱整体组装/焊接", unit:"根", formula:"pillarsPerZone * 1 * sets", price:50, note:"[昆山创思协尔]" },
+  /* ===== 二、主螺旋柱 ===== */
+  { sec:"二、主螺旋柱", type:"std", name:"主螺旋柱-垂直段圆棒", spec:"304不锈钢 长2600mm×Ø12mm", unit:"根", formula:"mainPoles * sets", price:37.6, note:"[辅助螺旋杆终端锚柱价格]" },
+  { sec:"二、主螺旋柱", type:"std", name:"主螺旋柱-斜支撑段圆棒", spec:"304不锈钢 长1400mm×Ø12mm", unit:"根", formula:"mainPoles * sets", price:20.3, note:"[辅助螺旋杆终端锚柱价格]" },
+  { sec:"二、主螺旋柱", type:"std", name:"主螺旋柱-垂直段弹簧", spec:"304 长2570mm×圈径31mm×线径3.5mm×间隙18mm", unit:"根", formula:"mainPoles * sets", price:25, note:"[辅助螺旋杆终端锚柱价格]" },
+  { sec:"二、主螺旋柱", type:"std", name:"主螺旋柱-斜支撑段弹簧", spec:"304 长946mm×圈径31mm×线径3.5mm×间隙18mm", unit:"根", formula:"mainPoles * sets", price:9.4, note:"[辅助螺旋杆终端锚柱价格]" },
+  { sec:"二、主螺旋柱", type:"std", name:"主螺旋柱-U型锁扣", spec:"304 12mm", unit:"个", formula:"mainULocks * mainPoles * sets", price:3.96, note:"每柱6个" },
+  { sec:"二、主螺旋柱", type:"std", name:"垂直段螺旋杆支架", spec:"QC235 30*30*328", unit:"个", formula:"mainPoles * vertSupports * sets", price:13, note:"垂直段3个支架" },
+  { sec:"二、主螺旋柱", type:"std", name:"斜支撑段螺旋杆支架", spec:"QC235 30*30*380", unit:"个", formula:"mainPoles * slopeSupports * sets", price:14, note:"斜支撑段1个支架" },
+  { sec:"二、主螺旋柱", type:"std", name:"斜支撑段螺旋杆支架（方孔）", spec:"QC235 30*30*380 带方孔", unit:"个", formula:"mainPoles * squareSupports * sets", price:14.5, note:"斜支撑衔接垂直段1个" },
+  /* ===== 三、终端锚柱 ===== */
+  { sec:"三、终端锚柱", type:"std", name:"终端锚柱-垂直段", spec:"304不锈钢 长2570mm×Ø30mm×壁厚3mm", unit:"根", formula:"anchorPosts * sets", price:98, note:"[辅助螺旋杆终端锚柱价格]" },
+  { sec:"三、终端锚柱", type:"std", name:"终端锚柱-斜支撑段", spec:"304不锈钢 长810mm×Ø30mm×壁厚3mm", unit:"根", formula:"anchorPosts * sets", price:34, note:"[辅助螺旋杆终端锚柱价格]" },
+  { sec:"三、终端锚柱", type:"std", name:"紧线器", spec:"张力线收紧调节，每线1个", unit:"个", formula:"totalLines * sets", price:15.6, note:"双防区仅一侧加装" },
+  /* ===== 四、张力刺丝 ===== */
+  { sec:"四、张力刺丝", type:"std", name:"张力刺丝", spec:"按400米/卷", unit:"卷", formula:"ceil(totalLines * totalZoneLen * lineRedundancy / 400) * sets", price:538, note:"¥538/卷，每卷400米" },
+  /* ===== 五、设备箱及控制器 ===== */
+  { sec:"五、设备箱及控制器", type:"std", name:"配电箱", spec:"室外防水配电箱，内置2个控制器", unit:"台", formula:"1 * sets", price:500, note:"每箱含2个控制器" },
+  { sec:"五、设备箱及控制器", type:"std", name:"防雷模块", spec:"配电箱防雷", unit:"个", formula:"1 * sets", price:85, note:"配电箱内额外加装" },
+  { sec:"五、设备箱及控制器", type:"std", name:"主控制器板", spec:"PCBA主板", unit:"块", formula:"zonesPerPillar * sets", price:116.39, note:"双防区2块/单防区1块" },
+  { sec:"五、设备箱及控制器", type:"std", name:"HX711模块", spec:"称重AD模块", unit:"个", formula:"2 * zonesPerPillar * sets", price:2.57, note:"双防区4个/单防区2个" },
+  { sec:"五、设备箱及控制器", type:"std", name:"耗材-杜邦线", spec:"连接线", unit:"套", formula:"zonesPerPillar * sets", price:2.43, note:"双防区2套/单防区1套" },
+  { sec:"五、设备箱及控制器", type:"std", name:"耗材-PCB灯", spec:"指示灯", unit:"个", formula:"5 * sets", price:0.94, note:"[用户提供-控制器BOM]" },
+  { sec:"五、设备箱及控制器", type:"std", name:"生产-嘉立创SMT", spec:"贴片加工", unit:"套", formula:"zonesPerPillar * sets", price:29.42, note:"双防区2套/单防区1套" },
+  { sec:"五、设备箱及控制器", type:"std", name:"嘉立创SMT耗材-电阻", spec:"贴片电阻", unit:"套", formula:"zonesPerPillar * sets", price:0.18, note:"双防区2套/单防区1套" },
+  { sec:"五、设备箱及控制器", type:"std", name:"嘉立创SMT耗材-晶体管光耦", spec:"贴片元件", unit:"套", formula:"zonesPerPillar * sets", price:2.29, note:"双防区2套/单防区1套" },
+  { sec:"五、设备箱及控制器", type:"std", name:"控制器壳体", spec:"控制器外壳", unit:"个", formula:"zonesPerPillar * sets", price:37.52, note:"双防区2个/单防区1个" },
+  /* ===== 选-一、探测器柱组件变坡滑轮支架 ===== */
+  { sec:"选-一、探测器柱组件变坡滑轮支架", type:"opt", name:"探测器柱垂直段支架(斜坡段)", spec:"304钣金，斜坡段降摩擦专用", unit:"个", formula:"pillarVertSlope * vertLines * sets", price:7, note:"[九院物料采购跟踪表]" },
+  { sec:"选-一、探测器柱组件变坡滑轮支架", type:"opt", name:"探测器柱斜支撑支架(斜坡段)", spec:"304钣金，斜坡段专用", unit:"个", formula:"pillarSlopeSlope * slopeLines * sets", price:8, note:"[九院物料采购跟踪表]" },
+  { sec:"选-一、探测器柱组件变坡滑轮支架", type:"opt", name:"斜坡段滑轮(单轴承)", spec:"304 U型滑轮", unit:"个", formula:"totalLines * sets", price:4.8, note:"" },
+  { sec:"选-一、探测器柱组件变坡滑轮支架", type:"opt", name:"轴承固定滑轮轴套(靠前面板)", spec:"304 6×8×3滑轮轴套", unit:"个", formula:"totalLines * sets", price:0.43, note:"" },
+  { sec:"选-一、探测器柱组件变坡滑轮支架", type:"opt", name:"轴承固定滑轮轴套(靠后背板)", spec:"304 6×8×5滑轮轴套", unit:"个", formula:"totalLines * sets", price:0.44, note:"" },
+  { sec:"选-一、探测器柱组件变坡滑轮支架", type:"opt", name:"轴承固定等高螺栓", spec:"304 6×18×M5等高螺栓", unit:"个", formula:"totalLines * sets", price:0.66, note:"" },
+  { sec:"选-一、探测器柱组件变坡滑轮支架", type:"opt", name:"轴承固定防松螺母", spec:"304 M5防松螺母", unit:"个", formula:"totalLines * sets", price:0.1, note:"" },
+  { sec:"选-一、探测器柱组件变坡滑轮支架", type:"opt", name:"轴承支架固定螺母(锁线)", spec:"304 M6", unit:"个", formula:"totalLines * sets", price:0.08, note:"" },
+  { sec:"选-一、探测器柱组件变坡滑轮支架", type:"opt", name:"轴承支架固定螺栓(锁线)", spec:"304 M6×30", unit:"个", formula:"totalLines * sets", price:0.28, note:"" },
+  { sec:"选-一、探测器柱组件变坡滑轮支架", type:"opt", name:"探测器柱轴承衔接螺母", spec:"304 M8", unit:"个", formula:"totalLines * 2 * sets", price:0.155, note:"" },
+  { sec:"选-一、探测器柱组件变坡滑轮支架", type:"opt", name:"探测器柱轴承衔接螺栓", spec:"304 M8×12", unit:"个", formula:"totalLines * 2 * sets", price:0.366, note:"" },
+  /* ===== 选-二、辅助螺旋柱 ===== */
+  { sec:"选-二、辅助螺旋柱", type:"opt", name:"辅助螺旋柱-垂直段圆棒", spec:"304不锈钢 长2700mm×Ø6mm", unit:"根", formula:"mainPoles * sets", price:14, note:"" },
+  { sec:"选-二、辅助螺旋柱", type:"opt", name:"辅助螺旋柱-垂直段弹簧", spec:"304 长2570mm×圈径22mm×线径3mm×间隙18mm", unit:"根", formula:"mainPoles * squareSupports * sets", price:10.3, note:"" },
+  { sec:"选-二、辅助螺旋柱", type:"opt", name:"辅助螺旋柱-U型锁扣", spec:"304 6mm", unit:"个", formula:"auxULocks * mainPoles * sets", price:1, note:"" },
+  /* ===== 选-三、转角滑轮柱（水平转角） ===== */
+  { sec:"选-三、转角滑轮柱（水平转角）", type:"opt", name:"转角柱-垂直段(同终端锚柱主材)", spec:"304不锈钢 长2570mm×Ø30mm×壁厚3mm", unit:"根", formula:"horizCorners * sets", price:98, note:"" },
+  { sec:"选-三、转角滑轮柱（水平转角）", type:"opt", name:"转角柱-斜支撑段(同终端锚柱主材)", spec:"304不锈钢 长810mm×Ø30mm×壁厚3mm", unit:"根", formula:"horizCorners * sets", price:34, note:"" },
+  { sec:"选-三、转角滑轮柱（水平转角）", type:"opt", name:"单轴承滑轮（U型）", spec:"304 U型滑轮", unit:"个", formula:"totalLines * sets", price:4.8, note:"每线1个" },
+  { sec:"选-三、转角滑轮柱（水平转角）", type:"opt", name:"转角柱滑轮支架", spec:"钣金加工 转角滑轮柱衔接件", unit:"个", formula:"totalLines * sets", price:0.8, note:"" },
+  { sec:"选-三、转角滑轮柱（水平转角）", type:"opt", name:"轴承固定等高螺栓", spec:"304 6×18×M5等高螺栓", unit:"个", formula:"totalLines * sets", price:0.66, note:"" },
+  { sec:"选-三、转角滑轮柱（水平转角）", type:"opt", name:"轴承固定防松螺母", spec:"304 M5防松螺母", unit:"个", formula:"totalLines * sets", price:0.1, note:"" },
+  { sec:"选-三、转角滑轮柱（水平转角）", type:"opt", name:"轴承固定防松轴套", spec:"304 6×8×4滑轮轴套", unit:"个", formula:"totalLines * 2 * sets", price:0.44, note:"" },
+  { sec:"选-三、转角滑轮柱（水平转角）", type:"opt", name:"滑轮柱支架衔接螺栓", spec:"304 M6×40螺栓", unit:"个", formula:"totalLines * 2 * sets", price:0.322, note:"" },
+  { sec:"选-三、转角滑轮柱（水平转角）", type:"opt", name:"滑轮柱支架衔接螺母", spec:"304 M6防松螺母", unit:"个", formula:"totalLines * sets", price:0.105, note:"" },
+  { sec:"选-三、转角滑轮柱（水平转角）", type:"opt", name:"滑轮柱支架衔接螺母垫片", spec:"304 M6螺母平垫", unit:"片", formula:"totalLines * 2 * sets", price:0.03, note:"" },
+  { sec:"选-三、转角滑轮柱（水平转角）", type:"opt", name:"轴承支架固定螺母（锁线）", spec:"304 M6螺母", unit:"个", formula:"totalLines * 2 * sets", price:0.077, note:"" },
+  { sec:"选-三、转角滑轮柱（水平转角）", type:"opt", name:"轴承支架固定螺栓（锁线）", spec:"304 M6×30螺栓", unit:"个", formula:"totalLines * sets", price:0.277, note:"" },
+  /* ===== 选-四、转角滑轮柱（变坡转角） ===== */
+  { sec:"选-四、转角滑轮柱（变坡转角）", type:"opt", name:"转角柱-垂直段(同终端锚柱主材)", spec:"304不锈钢 长2570mm×Ø30mm×壁厚3mm", unit:"根", formula:"slopeCorners * sets", price:98, note:"" },
+  { sec:"选-四、转角滑轮柱（变坡转角）", type:"opt", name:"转角柱-斜支撑段(同终端锚柱主材)", spec:"304不锈钢 长810mm×Ø30mm×壁厚3mm", unit:"根", formula:"slopeCorners * sets", price:34, note:"" },
+  { sec:"选-四、转角滑轮柱（变坡转角）", type:"opt", name:"单轴承滑轮（U型）", spec:"304 U型滑轮", unit:"个", formula:"totalLines * sets", price:4.8, note:"" },
+  { sec:"选-四、转角滑轮柱（变坡转角）", type:"opt", name:"转角柱滑轮支架", spec:"钣金加工 转角滑轮柱衔接件", unit:"个", formula:"totalLines * sets", price:0.8, note:"" },
+  { sec:"选-四、转角滑轮柱（变坡转角）", type:"opt", name:"轴承固定等高螺栓", spec:"304 6×18×M5等高螺栓", unit:"个", formula:"totalLines * sets", price:0.66, note:"" },
+  { sec:"选-四、转角滑轮柱（变坡转角）", type:"opt", name:"轴承固定防松螺母", spec:"304 M5防松螺母", unit:"个", formula:"totalLines * sets", price:0.1, note:"" },
+  { sec:"选-四、转角滑轮柱（变坡转角）", type:"opt", name:"轴承固定防松轴套", spec:"304 6×8×4滑轮轴套", unit:"个", formula:"totalLines * 2 * sets", price:0.44, note:"" },
+  { sec:"选-四、转角滑轮柱（变坡转角）", type:"opt", name:"滑轮柱支架衔接螺栓", spec:"304 M6×40螺栓", unit:"个", formula:"totalLines * 2 * sets", price:0.322, note:"" },
+  { sec:"选-四、转角滑轮柱（变坡转角）", type:"opt", name:"滑轮柱支架衔接螺母", spec:"304 M6防松螺母", unit:"个", formula:"totalLines * 2 * sets", price:0.105, note:"" },
+  { sec:"选-四、转角滑轮柱（变坡转角）", type:"opt", name:"滑轮柱支架衔接螺母垫片", spec:"304 M6螺母平垫", unit:"片", formula:"totalLines * 1 * sets", price:0.03, note:"" },
+];
+const DEFAULT_PRICES   = BOM.map(it=>it.price);
+const DEFAULT_FORMULAS = BOM.map(it=>it.formula);
+
+/* =========================================================
+ *  本地存储
+ * ========================================================= */
+function lsGet(key, fb){
+  try{ const s = localStorage.getItem(key); return s==null ? fb : JSON.parse(s); }catch(e){ return fb; }
+}
+function lsSet(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
+
+function loadParams(){
+  const out = {};
+  for(const k in DEFAULT_PARAMS) out[k] = DEFAULT_PARAMS[k].v;
+  const s = lsGet("tf_params", null);
+  if(s && typeof s === "object") Object.assign(out, s);
+  return out;
+}
+function loadCustom(){
+  const arr = lsGet("tf_custom", []);
+  return (Array.isArray(arr)?arr:[]).map(c=>({...c, sec: c.sec || "其他自定义"}));
+}
+function loadCustomParams(){
+  const arr = lsGet("tf_cparams", []);
+  return Array.isArray(arr) ? arr : [];
+}
+function loadEquipmentList(){
+  const arr = lsGet("tf_equip", null);
+  if(Array.isArray(arr) && arr.length > 0){
+    return arr.map(e=>({
+      id: e.id || uid(),
+      name: String(e.name||"设备"),
+      sets: +e.sets || 1,
+      mode: e.mode === "single" ? "single" : "double",
+      zones: Array.isArray(e.zones) && e.zones.length
+              ? e.zones.map(z=>({name:String(z.name||""), length:+z.length||0}))
+              : DEFAULT_ZONES.map(z=>({...z})),
+    }));
+  }
+  // 迁移：旧 tf_zones / 旧 leftLen+rightLen → 一台默认设备
+  const oldZones  = lsGet("tf_zones", null);
+  const oldParams = lsGet("tf_params", null) || {};
+  let zones0 = null;
+  if(Array.isArray(oldZones) && oldZones.length){
+    zones0 = oldZones.map(z=>({name:String(z.name||""), length:+z.length||0}));
+  }else if(Number.isFinite(+oldParams.leftLen) || Number.isFinite(+oldParams.rightLen)){
+    zones0 = [
+      {name:"左防区", length: +oldParams.leftLen || 40},
+      {name:"右防区", length: +oldParams.rightLen || 40},
+    ];
+  }
+  const sets0 = +oldParams.sets || 1;
+  return [{id: uid(), name:"设备 1", sets: sets0, mode:"double",
+           zones: zones0 || DEFAULT_ZONES.map(z=>({...z}))}];
+}
+
+let params           = loadParams();
+let priceOverrides   = lsGet("tf_prices", {}) || {};
+let formulaOverrides = lsGet("tf_formulas", {}) || {};
+let customItems      = loadCustom();
+let customParams     = loadCustomParams();
+let equipmentList    = loadEquipmentList();
+let activeEquipId    = lsGet("tf_active", null) || equipmentList[0].id;
+let viewMode         = lsGet("tf_view", "aggregate"); // "aggregate" | "single"
+
+// ensure active id is valid
+if(!equipmentList.some(e=>e.id===activeEquipId)) activeEquipId = equipmentList[0].id;
+
+function saveAll(){
+  lsSet("tf_params", params);
+  lsSet("tf_prices", priceOverrides);
+  lsSet("tf_formulas", formulaOverrides);
+  lsSet("tf_custom", customItems);
+  lsSet("tf_cparams", customParams);
+  lsSet("tf_equip", equipmentList);
+  lsSet("tf_active", activeEquipId);
+  lsSet("tf_view", viewMode);
+}
+function activeEquip(){ return equipmentList.find(e=>e.id===activeEquipId) || equipmentList[0]; }
+
+/* =========================================================
+ *  作用域 / 公式求值（按设备）
+ * ========================================================= */
+function zonePoles(z, spacing){
+  return Math.max(0, Math.ceil((+z.length||0)/(+spacing||1))-1);
+}
+function derivedFor(equip){
+  const sets = +equip.sets || 1;
+  const totalZoneLen = equip.zones.reduce((a,z)=>a + (+z.length||0), 0);
+  const totalLen   = totalZoneLen * sets;
+  const totalLines = (+params.vertLines||0) + (+params.slopeLines||0);
+  const mainPoles  = equip.zones.reduce((a,z)=>a + zonePoles(z, params.mainSpacing), 0);
+  const zonesPerPillar = zonesPerPillarOf(equip);
+  return { totalLen, totalLines, mainPoles, totalZoneLen,
+           zoneCount: equip.zones.length, sets, zonesPerPillar };
+}
+function buildScope(equip){
+  const d = derivedFor(equip);
+  const s = {...params, ...d};
+  s.leftLen  = +equip.zones[0]?.length || 0;
+  s.rightLen = +equip.zones[1]?.length || 0;
+  equip.zones.forEach((z, i)=>{ s["zoneLen"+(i+1)] = +z.length||0; });
+  for(const cp of customParams){
+    if(!cp.key) continue;
+    s[cp.key] = Number(cp.value)||0;
+  }
+  return s;
+}
+
+function evalFormula(src, scope){
+  const t = src==null?"":String(src).trim();
+  if(!t) return NaN;
+  try{
+    const names = Object.keys(scope);
+    const args  = names.map(n=>scope[n]);
+    const fn = new Function(...names, ...HELPER_NAMES, `"use strict"; return (${t});`);
+    const r = Number(fn(...args, ...HELPER_FNS));
+    return Number.isFinite(r) ? r : NaN;
+  }catch(e){ return NaN; }
+}
+function evalFormulaErr(src, scope){
+  const t = src==null?"":String(src).trim();
+  if(!t) return {ok:false, err:"公式为空"};
+  try{
+    const names = Object.keys(scope);
+    const args  = names.map(n=>scope[n]);
+    const fn = new Function(...names, ...HELPER_NAMES, `"use strict"; return (${t});`);
+    const r = Number(fn(...args, ...HELPER_FNS));
+    if(!Number.isFinite(r)) return {ok:false, err:"结果非数值"};
+    return {ok:true, value:r};
+  }catch(e){ return {ok:false, err:e.message || "公式错误"}; }
+}
+
+function rowFormula(i){
+  return formulaOverrides[i] !== undefined ? formulaOverrides[i] : DEFAULT_FORMULAS[i];
+}
+function isFormulaOverridden(i){
+  return formulaOverrides[i] !== undefined && formulaOverrides[i] !== DEFAULT_FORMULAS[i];
+}
+
+/* 求和：跨设备聚合某一行 BOM 的数量 */
+function sysRowQty(i, equip){
+  return Math.max(0, evalFormula(rowFormula(i), buildScope(equip)) || 0);
+}
+function sysRowAggregate(i){
+  return equipmentList.reduce((a, e)=>a + sysRowQty(i, e), 0);
+}
+function sysRowBreakdown(i){
+  return equipmentList.map(e=>({equip:e, qty: sysRowQty(i, e)}));
+}
+/* 自定义项数量（在 active 设备的 scope 下求值） */
+function cusRowQty(c){
+  const scope = buildScope(activeEquip());
+  if(c.qtyFormula){
+    return Math.max(0, evalFormula(c.qtyFormula, scope) || 0);
+  }
+  return +c.qty || 0;
+}
+
+/* =========================================================
+ *  BOM 段索引
+ * ========================================================= */
+const SECTIONS = (()=>{
+  const seen = {}; const list = [];
+  BOM.forEach(it=>{ if(seen[it.sec]===undefined){ seen[it.sec]=it.type; list.push({sec:it.sec,type:it.type}); } });
+  return list;
+})();
+function sectionType(secName){
+  const s = SECTIONS.find(x=>x.sec===secName); return s ? s.type : "cus";
+}
+
+/* =========================================================
+ *  渲染：左侧 - 设备列表与参数表单
+ * ========================================================= */
+function cparamRow(cp, i){
+  return `<div class="cparam" data-cpi="${i}">
+    <input class="k" data-cf="key"  value="${escAttr(cp.key||"")}"   placeholder="c1" maxlength="24">
+    <input class="l" data-cf="label" value="${escAttr(cp.label||"")}" placeholder="自定义参数名">
+    <span style="display:flex;gap:3px">
+      <input class="v" data-cf="value" type="number" step="any" value="${cp.value}" style="flex:1">
+      <input class="u" data-cf="unit"  value="${escAttr(cp.unit||"")}"  placeholder="单位" style="width:40px">
+    </span>
+    <button class="del-btn" data-cpdel="${i}" title="删除">×</button>
+  </div>`;
+}
+
+function renderEquipmentList(){
+  let html = "";
+  equipmentList.forEach((e, i)=>{
+    const tz = e.zones.reduce((a,z)=>a+(+z.length||0),0);
+    const on = e.id === activeEquipId;
+    html += `<div class="equip-row ${on?'on':''}" data-eid="${e.id}">
+      <div class="e-top">
+        <span class="e-radio"></span>
+        <input class="e-name" data-ef="name" value="${escAttr(e.name)}" placeholder="设备名称">
+        <span class="e-act">
+          <button data-edup="${e.id}" title="复制该设备">⎘</button>
+          <button class="danger" data-edel="${e.id}" title="删除该设备">×</button>
+        </span>
+      </div>
+      <div class="e-meta">
+        <span>${e.zones.length} 防区 · ${round2(tz)} m</span>
+        <select class="e-mode" data-ef="mode" title="单防区 = 1传感器/1控制器/1防雷；双防区 = 2套">
+          <option value="double" ${e.mode!=="single"?"selected":""}>双防区</option>
+          <option value="single" ${e.mode==="single"?"selected":""}>单防区</option>
+        </select>
+        <span class="sets">套数 <input data-ef="sets" type="number" step="1" min="1" value="${e.sets}"></span>
+      </div>
+    </div>`;
+  });
+  html += `<div class="add-line" id="addEquip">+ 新增设备</div>`;
+  // 列表汇总
+  const totalSets = equipmentList.reduce((a,e)=>a + (+e.sets||1), 0);
+  const totalLen  = equipmentList.reduce((a,e)=>a + e.zones.reduce((b,z)=>b+(+z.length||0),0) * (+e.sets||1), 0);
+  html += `<div class="zone-sum">
+    <div>设备数：<b>${equipmentList.length}</b> · 总套数：<b>${totalSets}</b> · 全部围栏总长：<b>${round2(totalLen)} m</b></div>
+  </div>`;
+  return html;
+}
+
+function renderActiveZones(){
+  const e = activeEquip();
+  let html = `<div style="font-size:11.5px;color:var(--muted);margin-bottom:3px">当前设备：<b>${esc(e.name)}</b> · 套数 ${e.sets} · ${e.mode==="single"?"单防区":"双防区"}</div>`;
+  html += `<div class="zone-head"><div>防区名称</div><div>长度</div><div></div><div></div></div>`;
+  e.zones.forEach((z, i)=>{
+    html += `<div class="zone-row" data-zi="${i}" title="变量名：zoneLen${i+1}">
+      <input class="zname" data-zf="name"   value="${escAttr(z.name||"")}" placeholder="防区${i+1}">
+      <input class="zlen"  data-zf="length" type="number" step="any" min="0" value="${z.length}">
+      <span class="zunit">米</span>
+      <button class="del-btn" data-zdel="${i}" title="删除防区">×</button>
+    </div>`;
+  });
+  html += `<div class="add-line" id="addZone">+ 在该设备下添加防区</div>`;
+  const sp = +params.mainSpacing || 1;
+  let rows = "";
+  e.zones.forEach((z, i)=>{
+    rows += `<tr><td class="zk">${esc(z.name||("防区"+(i+1)))} <code>zoneLen${i+1}</code></td>
+      <td class="zv">${round2(+z.length||0)} m</td>
+      <td class="zv">${zonePoles(z, sp)} 根</td></tr>`;
+  });
+  const sumLen = e.zones.reduce((a,z)=>a+(+z.length||0), 0);
+  const sumPoles = e.zones.reduce((a,z)=>a+zonePoles(z, sp), 0);
+  html += `<div class="zone-sum">
+    <div>本设备单套总长 <code>totalZoneLen</code>：<b>${round2(sumLen)} m</b> · 主螺旋柱：<b>${sumPoles} 根</b>
+      · 本设备总价 ¥<b>${money(equipCost(e))}</b>（×${e.sets} 套）</div>
+    <table>${rows}</table>
+  </div>`;
+  return html;
+}
+
+function renderParams(){
+  const root = document.getElementById("params");
+
+  const builtinByG = {};
+  for(const k in DEFAULT_PARAMS){
+    const def = DEFAULT_PARAMS[k];
+    (builtinByG[def.g] = builtinByG[def.g] || []).push({key:k, ...def});
+  }
+  const customByG = {};
+  customParams.forEach((cp, i)=>{
+    const g = cp.group && (GROUPS[cp.group] || cp.group === "_misc") ? cp.group : "_misc";
+    (customByG[g] = customByG[g] || []).push({cp, i});
+  });
+
+  let html = "";
+  for(const g of Object.keys(GROUPS)){
+    html += `<h2>${GROUPS[g]}</h2>`;
+    if(g === "equip"){
+      html += renderEquipmentList();
+    }else if(g === "base"){
+      html += renderActiveZones();
+    }
+    if(builtinByG[g]){
+      for(const f of builtinByG[g]){
+        html += `<div class="field" title="变量名：${f.key}">
+          <label><code>${f.key}</code>${esc(f.label)}<span class="unit">${esc(f.u)}</span></label>
+          <input type="number" step="any" data-k="${f.key}" value="${params[f.key]}"></div>`;
+      }
+    }
+    if(customByG[g] && customByG[g].length){
+      customByG[g].forEach(({cp, i})=>{ html += cparamRow(cp, i); });
+    }
+    if(g !== "equip" && g !== "base"){
+      html += `<div class="add-line" data-addgrp="${g}">+ 在「${esc(GROUPS[g])}」下添加自定义参数</div>`;
+    }else if(g === "base"){
+      html += `<div class="add-line" data-addgrp="base">+ 为本设备添加自定义参数</div>`;
+    }
+  }
+
+  /* 派生量（基于当前选中设备） */
+  const d = derivedFor(activeEquip());
+  html += `<h2>派生量 <span class="key-hint">(基于当前设备)</span></h2>
+    <div class="field"><label><code>sets</code>当前设备套数<span class="unit">套</span></label>
+      <input type="text" id="dSets" value="${d.sets}" readonly></div>
+    <div class="field"><label><code>zoneCount</code>防区数<span class="unit">个</span></label>
+      <input type="text" id="dZoneCount" value="${d.zoneCount}" readonly></div>
+    <div class="field"><label><code>totalZoneLen</code>单套总长<span class="unit">m</span></label>
+      <input type="text" id="dTotalZoneLen" value="${d.totalZoneLen}" readonly></div>
+    <div class="field"><label><code>totalLen</code>本设备总长<span class="unit">m</span></label>
+      <input type="text" id="dTotalLen" value="${d.totalLen}" readonly></div>
+    <div class="field"><label><code>totalLines</code>总线数<span class="unit">线</span></label>
+      <input type="text" id="dTotalLines" value="${d.totalLines}" readonly></div>
+    <div class="field"><label><code>mainPoles</code>主螺旋柱总数<span class="unit">根</span></label>
+      <input type="text" id="dMainPoles" value="${d.mainPoles}" readonly></div>`;
+
+  if(customByG["_misc"] && customByG["_misc"].length){
+    html += `<h2>未分组自定义参数</h2>`;
+    customByG["_misc"].forEach(({cp, i})=>{ html += cparamRow(cp, i); });
+  }
+  html += `<div class="add-line" data-addgrp="_misc">+ 添加未分组的自定义参数</div>`;
+
+  root.innerHTML = html;
+
+  /* 绑定：内置参数 */
+  root.querySelectorAll("input[data-k]").forEach(el=>{
+    el.addEventListener("input", ()=>{
+      const v = parseFloat(el.value);
+      if(!Number.isFinite(v)){ el.style.borderColor="var(--bad)"; return; }
+      el.style.borderColor = "";
+      params[el.dataset.k] = v;
+      saveAll(); rerender();
+    });
+  });
+  /* 自定义参数 */
+  root.querySelectorAll("[data-cpi]").forEach(row=>{
+    const i = +row.dataset.cpi;
+    row.querySelectorAll("input[data-cf]").forEach(el=>{
+      el.addEventListener("input", ()=>{
+        const f = el.dataset.cf;
+        if(f === "key"){
+          const k = el.value.trim();
+          if(k && !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k)){ el.style.borderColor="var(--bad)"; el.title="变量名只能含字母数字下划线，且不以数字开头"; return; }
+          if(k && RESERVED.has(k)){ el.style.borderColor="var(--bad)"; el.title="与内置变量冲突"; return; }
+          const dup = customParams.some((cp,j)=>j!==i && cp.key===k && k);
+          if(dup){ el.style.borderColor="var(--bad)"; el.title="变量名重复"; return; }
+          el.style.borderColor=""; el.title="";
+          customParams[i].key = k;
+        }else if(f === "value"){
+          const v = parseFloat(el.value);
+          if(!Number.isFinite(v)){ el.style.borderColor="var(--bad)"; return; }
+          el.style.borderColor="";
+          customParams[i].value = v;
+        }else{
+          customParams[i][f] = el.value;
+        }
+        saveAll(); rerender();
+      });
+    });
+    row.querySelector("button[data-cpdel]").addEventListener("click", ()=>{
+      customParams.splice(i,1); saveAll(); renderParams(); rerender();
+    });
+  });
+  root.querySelectorAll("[data-addgrp]").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      const g = b.dataset.addgrp;
+      const label = g === "_misc" ? "新参数" : `${GROUPS[g]||g} - 新参数`;
+      customParams.push({key: nextCParamKey(), label, unit:"", value:0, group: g});
+      saveAll(); renderParams(); rerender();
+    });
+  });
+
+  /* 设备列表 */
+  root.querySelectorAll(".equip-row").forEach(row=>{
+    const eid = row.dataset.eid;
+    row.addEventListener("click", e=>{
+      if(e.target.closest("input") || e.target.closest("button")) return;
+      if(eid !== activeEquipId){ activeEquipId = eid; saveAll(); renderParams(); rerender(); }
+    });
+    row.querySelectorAll("[data-ef]").forEach(el=>{
+      const evt = el.tagName === "SELECT" ? "change" : "input";
+      el.addEventListener(evt, ()=>{
+        const f = el.dataset.ef;
+        const e = equipmentList.find(x=>x.id===eid);
+        if(!e) return;
+        if(f === "sets"){
+          const v = parseInt(el.value, 10);
+          if(!Number.isFinite(v) || v < 1){ el.style.borderColor="var(--bad)"; return; }
+          el.style.borderColor = "";
+          e.sets = v;
+        }else if(f === "mode"){
+          e.mode = el.value === "single" ? "single" : "double";
+        }else if(f === "name"){
+          e.name = el.value;
+        }
+        saveAll(); rerender(); renderParams();
+      });
+    });
+    const dup = row.querySelector("button[data-edup]");
+    if(dup) dup.addEventListener("click", e=>{
+      e.stopPropagation();
+      const src = equipmentList.find(x=>x.id===eid);
+      if(!src) return;
+      const copy = {id: uid(), name: src.name + " (副本)", sets: src.sets,
+                    zones: src.zones.map(z=>({...z}))};
+      const idx = equipmentList.findIndex(x=>x.id===eid);
+      equipmentList.splice(idx+1, 0, copy);
+      activeEquipId = copy.id;
+      saveAll(); renderParams(); rerender();
+    });
+    const del = row.querySelector("button[data-edel]");
+    if(del) del.addEventListener("click", e=>{
+      e.stopPropagation();
+      if(equipmentList.length <= 1){ alert("至少保留 1 台设备。"); return; }
+      const src = equipmentList.find(x=>x.id===eid);
+      if(!confirm(`确定删除「${src.name}」？此操作不可撤销。`)) return;
+      const idx = equipmentList.findIndex(x=>x.id===eid);
+      equipmentList.splice(idx, 1);
+      if(activeEquipId === eid) activeEquipId = equipmentList[Math.max(0,idx-1)].id;
+      saveAll(); renderParams(); rerender();
+    });
+  });
+  const addE = document.getElementById("addEquip");
+  if(addE) addE.addEventListener("click", ()=>{
+    const e = defaultEquipment(equipmentList.length+1);
+    equipmentList.push(e);
+    activeEquipId = e.id;
+    saveAll(); renderParams(); rerender();
+  });
+
+  /* 防区行 */
+  root.querySelectorAll("[data-zi]").forEach(row=>{
+    const i = +row.dataset.zi;
+    row.querySelectorAll("input[data-zf]").forEach(el=>{
+      el.addEventListener("input", ()=>{
+        const e = activeEquip();
+        const f = el.dataset.zf;
+        if(f === "length"){
+          const v = parseFloat(el.value);
+          if(!Number.isFinite(v) || v < 0){ el.style.borderColor="var(--bad)"; return; }
+          el.style.borderColor = "";
+          e.zones[i].length = v;
+        }else{
+          e.zones[i][f] = el.value;
+        }
+        saveAll(); rerender();
+        renderParams();
+      });
+    });
+    row.querySelector("button[data-zdel]").addEventListener("click", ()=>{
+      const e = activeEquip();
+      if(e.zones.length <= 1){ alert("当前设备至少保留 1 个防区。"); return; }
+      e.zones.splice(i, 1);
+      saveAll(); renderParams(); rerender();
+    });
+  });
+  const addZ = document.getElementById("addZone");
+  if(addZ) addZ.addEventListener("click", ()=>{
+    const e = activeEquip();
+    e.zones.push({name:`防区${e.zones.length+1}`, length: 40});
+    saveAll(); renderParams(); rerender();
+  });
+}
+
+function nextCParamKey(){
+  const used = new Set(customParams.map(c=>c.key));
+  for(let i=1; i<=999; i++){
+    const k = "c"+i;
+    if(!used.has(k) && !RESERVED.has(k)) return k;
+  }
+  return "c"+Date.now();
+}
+
+/* 单台设备的总成本（用于侧栏显示） */
+function equipCost(equip){
+  let total = 0;
+  BOM.forEach((it, i)=>{
+    const price = priceOverrides[i] !== undefined ? priceOverrides[i] : it.price;
+    const qty = sysRowQty(i, equip);
+    total += qty * price;
+  });
+  return total;
+}
+
+/* =========================================================
+ *  渲染：BOM
+ * ========================================================= */
+function rerender(){
+  // 更新派生量
+  const d = derivedFor(activeEquip());
+  const setEl = (id,v)=>{ const e = document.getElementById(id); if(e) e.value = v; };
+  setEl("dSets", d.sets);
+  setEl("dZoneCount", d.zoneCount);
+  setEl("dTotalZoneLen", round2(d.totalZoneLen));
+  setEl("dTotalLen", round2(d.totalLen));
+  setEl("dTotalLines", d.totalLines);
+  setEl("dMainPoles", d.mainPoles);
+  // 模式按钮
+  document.querySelectorAll("#modeSwitch button").forEach(b=>{
+    b.classList.toggle("on", b.dataset.mode === viewMode);
+  });
+  renderBOM();
+  renderSummary();
+}
+
+function renderBOM(){
+  const root = document.getElementById("bom");
+  const isAgg = viewMode === "aggregate";
+  const ae = activeEquip();
+  const aeScope = buildScope(ae);
+
+  // 顶部提示横幅
+  let html = "";
+  if(isAgg){
+    html += `<div class="bom-banner">
+      <span class="badge">汇总</span>
+      <b>全部 ${equipmentList.length} 台设备 / ${equipmentList.reduce((a,e)=>a+(+e.sets||1),0)} 套</b>
+      系统行数量 = 各设备按其自身防区与套数分别求值后求和；自定义子项以填写值计入（在当前选中设备的作用域下求公式）。
+    </div>`;
+  }else{
+    html += `<div class="bom-banner">
+      <span class="badge">单设备</span>
+      <b>${esc(ae.name)}</b> · ${ae.mode==="single"?"单防区":"双防区"} · ${ae.zones.length} 防区 · ${ae.sets} 套 · 单套总长 ${round2(ae.zones.reduce((a,z)=>a+(+z.length||0),0))} m
+    </div>`;
+  }
+
+  /* 按 sec 分组 */
+  const sysBySec = {};
+  BOM.forEach((it,i)=>{
+    const price = priceOverrides[i] !== undefined ? priceOverrides[i] : it.price;
+    const qty   = isAgg ? sysRowAggregate(i) : sysRowQty(i, ae);
+    const sub   = qty * price;
+    (sysBySec[it.sec] = sysBySec[it.sec] || []).push(
+      {i, qty, price, sub, item:it,
+       priceChanged: priceOverrides[i]!==undefined,
+       fxModified: isFormulaOverridden(i)}
+    );
+  });
+  const cusBySec = {};
+  customItems.forEach((c, ci)=>{
+    const sec = c.sec || "其他自定义";
+    (cusBySec[sec] = cusBySec[sec] || []).push({c, ci});
+  });
+
+  const orderedSecs = SECTIONS.map(s=>s.sec);
+  const extraSecs   = Object.keys(cusBySec).filter(s=>!orderedSecs.includes(s));
+  const allSecs     = orderedSecs.concat(extraSecs);
+
+  let seq = 1;
+  for(const sec of allSecs){
+    const sysRows = sysBySec[sec] || [];
+    const cusRows = cusBySec[sec] || [];
+    if(sysRows.length === 0 && cusRows.length === 0) continue;
+
+    const type = sectionType(sec);
+    let secSum = 0;
+    sysRows.forEach(r=>{ secSum += r.sub; });
+    cusRows.forEach(({c})=>{ secSum += cusRowQty(c) * (Number(c.price)||0); });
+
+    const tagClass = type === "opt" ? "opt" : (type === "cus" ? "cus" : "");
+    const tagText  = type === "opt" ? "选配"   : (type === "cus" ? "自定义" : "标准");
+
+    html += `<div class="cat">
+      <h3>${esc(sec)} <span class="tag ${tagClass}">${tagText}</span>
+        <span class="sub">小计 <b>¥${money(secSum)}</b></span></h3>
+      <table>
+        <thead><tr>
+          <th class="num">#</th><th>部件名称</th><th>规格/材质</th><th>单位</th>
+          <th class="num">数量${isAgg?'（合计）':''}</th><th class="num">单价(元)</th><th class="num">小计(元)</th>
+          <th>备注</th><th></th>
+        </tr></thead><tbody>`;
+
+    for(const r of sysRows){
+      // 在汇总模式下，鼠标悬停数量显示每台设备的分解
+      let breakdownTitle = "";
+      if(isAgg){
+        const parts = sysRowBreakdown(r.i)
+          .filter(b=>b.qty>0)
+          .map(b=>`${b.equip.name}: ${fmtQty(b.qty)}`);
+        breakdownTitle = parts.join(" + ");
+      }
+      html += `<tr class="${r.fxModified?'fx-modified':''}">
+        <td class="idx num">${seq++}</td>
+        <td>${esc(r.item.name)}</td>
+        <td>${esc(r.item.spec)}</td>
+        <td class="unit">${esc(r.item.unit)}</td>
+        <td class="qty num"><div class="qty-cell">
+          <span class="qval ${isAgg?'qval-break':''}"${breakdownTitle?` title="${escAttr(breakdownTitle)}"`:''}>${fmtQty(r.qty)}</span>
+          <button class="fx-btn ${r.fxModified?'modified':''}" data-fx-sys="${r.i}" title="编辑公式">ƒ</button>
+        </div></td>
+        <td class="price"><input class="price-in" type="number" step="any" min="0"
+            data-pi="${r.i}" value="${r.price}"></td>
+        <td class="sub num">¥${money(r.sub)}</td>
+        <td class="note">${esc(r.item.note)}</td>
+        <td></td>
+      </tr>`;
+    }
+    cusRows.forEach(({c, ci}, n)=>{
+      const qVal = cusRowQty(c);
+      const sub  = qVal * (Number(c.price)||0);
+      const hasFormula = !!c.qtyFormula;
+      html += `<tr class="custom-row ${hasFormula?'fx-modified':''}">
+        <td class="idx num">+${n+1}</td>
+        <td><input class="text-in" data-ci="${ci}" data-f="name" value="${escAttr(c.name)}" placeholder="物料名称"></td>
+        <td><input class="text-in" data-ci="${ci}" data-f="spec" value="${escAttr(c.spec)}" placeholder="规格/材质"></td>
+        <td><input class="text-in" data-ci="${ci}" data-f="unit" value="${escAttr(c.unit)}" placeholder="个"></td>
+        <td class="qty"><div class="qty-cell">
+          ${hasFormula
+            ? `<span class="qval">${fmtQty(qVal)}</span>`
+            : `<input class="price-in" type="number" step="any" min="0" data-ci="${ci}" data-f="qty" value="${c.qty}">`}
+          <button class="fx-btn ${hasFormula?'modified':''}" data-fx-cus="${ci}" title="编辑公式">ƒ</button>
+        </div></td>
+        <td class="price"><input class="price-in" type="number" step="any" min="0" data-ci="${ci}" data-f="price" value="${c.price}"></td>
+        <td class="sub num">¥${money(sub)}</td>
+        <td><input class="text-in" data-ci="${ci}" data-f="note" value="${escAttr(c.note)}" placeholder="备注"></td>
+        <td class="del"><button class="del-btn" data-del="${ci}" title="删除">×</button></td>
+      </tr>`;
+    });
+
+    html += `</tbody></table>
+      <div class="add-row" data-addsec="${escAttr(sec)}">+ 在「${esc(sec)}」下添加自定义子项</div>
+    </div>`;
+  }
+
+  if(!cusBySec["其他自定义"]){
+    html += `<div class="cat" style="margin-top:18px">
+      <h3>其他自定义 <span class="tag cus">自定义</span></h3>
+      <div class="add-row" data-addsec="其他自定义">+ 添加不属于以上分组的自定义物料</div>
+    </div>`;
+  }
+
+  root.innerHTML = html;
+
+  /* 绑定 */
+  root.querySelectorAll("input[data-pi]").forEach(el=>{
+    el.addEventListener("input", ()=>{
+      const i = +el.dataset.pi;
+      const v = parseFloat(el.value);
+      if(!Number.isFinite(v) || v < 0){ el.style.borderColor="var(--bad)"; return; }
+      el.style.borderColor = "";
+      if(v === DEFAULT_PRICES[i]) delete priceOverrides[i];
+      else priceOverrides[i] = v;
+      saveAll(); rerender();
+    });
+  });
+  root.querySelectorAll("input[data-ci]").forEach(el=>{
+    el.addEventListener("input", ()=>{
+      const ci = +el.dataset.ci, f = el.dataset.f;
+      let v = el.value;
+      if(f==="qty" || f==="price"){
+        v = parseFloat(v);
+        if(!Number.isFinite(v) || v < 0){ el.style.borderColor="var(--bad)"; return; }
+        el.style.borderColor = "";
+      }
+      customItems[ci][f] = v;
+      saveAll(); rerender();
+    });
+  });
+  root.querySelectorAll("button[data-del]").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      customItems.splice(+b.dataset.del, 1); saveAll(); rerender();
+    });
+  });
+  root.querySelectorAll("[data-addsec]").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      customItems.push({sec:b.dataset.addsec, name:"", spec:"", unit:"个", qty:1, price:0, note:""});
+      saveAll(); rerender();
+    });
+  });
+  root.querySelectorAll("button[data-fx-sys]").forEach(b=>{
+    b.addEventListener("click", ()=>openFx({kind:"sys", i:+b.dataset.fxSys}));
+  });
+  root.querySelectorAll("button[data-fx-cus]").forEach(b=>{
+    b.addEventListener("click", ()=>openFx({kind:"cus", i:+b.dataset.fxCus}));
+  });
+}
+
+function renderSummary(){
+  const isAgg = viewMode === "aggregate";
+  const ae = activeEquip();
+  let std = 0, opt = 0;
+  BOM.forEach((it,i)=>{
+    const price = priceOverrides[i] !== undefined ? priceOverrides[i] : it.price;
+    const qty   = isAgg ? sysRowAggregate(i) : sysRowQty(i, ae);
+    const s = qty * price;
+    if(it.type === "std") std += s; else opt += s;
+  });
+  let cusOther = 0;
+  customItems.forEach(c=>{
+    const s = cusRowQty(c) * (Number(c.price)||0);
+    const t = sectionType(c.sec);
+    if(t === "std") std += s;
+    else if(t === "opt") opt += s;
+    else cusOther += s;
+  });
+  const grand = std + opt + cusOther;
+
+  // 顶部 stats
+  document.getElementById("kEquipCount").textContent = equipmentList.length;
+  document.getElementById("kSetsAll").textContent    = equipmentList.reduce((a,e)=>a+(+e.sets||1),0);
+  if(isAgg){
+    const totalLen = equipmentList.reduce((a,e)=>{
+      const tz = e.zones.reduce((b,z)=>b+(+z.length||0), 0);
+      return a + tz * (+e.sets||1);
+    }, 0);
+    const mainPoles = equipmentList.reduce((a,e)=>{
+      const pp = e.zones.reduce((b,z)=>b+zonePoles(z, params.mainSpacing), 0);
+      return a + pp * (+e.sets||1);
+    }, 0);
+    document.getElementById("kTotalLen").textContent  = round2(totalLen);
+    document.getElementById("kMainPoles").textContent = mainPoles;
+  }else{
+    const d = derivedFor(ae);
+    document.getElementById("kTotalLen").textContent  = round2(d.totalLen);
+    document.getElementById("kMainPoles").textContent = d.mainPoles * d.sets;
+  }
+  document.getElementById("kGrand").textContent = money(grand);
+}
+
+/* =========================================================
+ *  公式编辑器
+ * ========================================================= */
+let fxState = null;
+const fxModal   = document.getElementById("fxModal");
+const fxInput   = document.getElementById("fxInput");
+const fxResult  = document.getElementById("fxResult");
+const fxError   = document.getElementById("fxError");
+const fxDefault = document.getElementById("fxDefault");
+const fxVars    = document.getElementById("fxVars");
+
+function openFx(state){
+  fxState = state;
+  let title, sub, currentSrc, defaultSrc;
+  if(state.kind === "sys"){
+    const it = BOM[state.i];
+    title = "编辑数量公式 — " + it.name;
+    sub   = it.sec + " · " + it.spec;
+    currentSrc = rowFormula(state.i);
+    defaultSrc = DEFAULT_FORMULAS[state.i];
+  }else{
+    const c = customItems[state.i];
+    title = "编辑数量公式 — " + (c.name || "自定义子项");
+    sub   = (c.sec || "其他自定义") + (c.spec ? " · " + c.spec : "");
+    currentSrc = c.qtyFormula || String(c.qty||0);
+    defaultSrc = String(c.qty||0);
+  }
+  document.getElementById("fxTitle").textContent = title;
+  document.getElementById("fxSub").textContent   = sub;
+  fxInput.value     = currentSrc;
+  fxDefault.textContent = defaultSrc;
+  renderFxVars();
+  updateFxResult();
+  fxModal.classList.remove("hidden");
+  setTimeout(()=>fxInput.focus(), 50);
+}
+function closeFx(){ fxModal.classList.add("hidden"); fxState = null; }
+
+function renderFxVars(){
+  const DERIVED_LABELS = {
+    totalLen:"本设备总长（含套数）", totalLines:"总线数", mainPoles:"主螺旋柱总数",
+    totalZoneLen:"单套总长", zoneCount:"防区数", sets:"本设备套数",
+    zonesPerPillar:"每柱防区数（双=2/单=1）"
+  };
+  let html = "";
+  for(const k of Object.keys(DEFAULT_PARAMS)){
+    html += `<span class="fx-chip" data-ins="${k}"><b>${k}</b><span class="lab">${esc(DEFAULT_PARAMS[k].label)}</span></span>`;
+  }
+  for(const k of DERIVED_VARS){
+    html += `<span class="fx-chip derived" data-ins="${k}"><b>${k}</b><span class="lab">${DERIVED_LABELS[k]||""}</span></span>`;
+  }
+  activeEquip().zones.forEach((z, i)=>{
+    const k = "zoneLen"+(i+1);
+    html += `<span class="fx-chip derived" data-ins="${k}"><b>${k}</b><span class="lab">${esc(z.name||("防区"+(i+1)))}</span></span>`;
+  });
+  for(const cp of customParams){
+    if(!cp.key) continue;
+    html += `<span class="fx-chip custom" data-ins="${cp.key}"><b>${esc(cp.key)}</b><span class="lab">${esc(cp.label||"")}</span></span>`;
+  }
+  fxVars.innerHTML = html;
+  fxVars.querySelectorAll("[data-ins]").forEach(c=>{
+    c.addEventListener("click", ()=>insertAtCursor(fxInput, c.dataset.ins));
+  });
+}
+function insertAtCursor(input, text){
+  input.focus();
+  const s = input.selectionStart ?? input.value.length;
+  const e = input.selectionEnd ?? input.value.length;
+  const before = input.value.slice(0, s);
+  const after  = input.value.slice(e);
+  const pad = (before && !/[\s+\-*/(]$/.test(before)) ? " " : "";
+  const padAfter = (after && !/^[\s+\-*/)]/.test(after)) ? " " : "";
+  input.value = before + pad + text + padAfter + after;
+  const pos = (before + pad + text).length;
+  input.setSelectionRange(pos, pos);
+  updateFxResult();
+}
+function updateFxResult(){
+  const scope = buildScope(activeEquip());
+  const r = evalFormulaErr(fxInput.value, scope);
+  if(r.ok){
+    fxResult.textContent = fmtQty(Math.max(0, r.value));
+    fxResult.style.color = "var(--ok)";
+    fxError.textContent = "";
+  }else{
+    fxResult.textContent = "—";
+    fxResult.style.color = "var(--bad)";
+    fxError.textContent = "⚠ " + r.err;
+  }
+}
+fxInput.addEventListener("input", updateFxResult);
+fxInput.addEventListener("keydown", e=>{
+  if(e.key === "Enter"){ e.preventDefault(); document.getElementById("fxSave").click(); }
+  else if(e.key === "Escape"){ closeFx(); }
+});
+document.getElementById("fxClose").addEventListener("click", closeFx);
+document.getElementById("fxCancel").addEventListener("click", closeFx);
+document.getElementById("fxSave").addEventListener("click", ()=>{
+  if(!fxState) return;
+  const src = fxInput.value.trim();
+  if(fxState.kind === "sys"){
+    if(!src || src === DEFAULT_FORMULAS[fxState.i]) delete formulaOverrides[fxState.i];
+    else formulaOverrides[fxState.i] = src;
+  }else{
+    const c = customItems[fxState.i];
+    if(!src) delete c.qtyFormula;
+    else{
+      c.qtyFormula = src;
+      const r = evalFormulaErr(src, buildScope(activeEquip()));
+      if(r.ok) c.qty = r.value;
+    }
+  }
+  saveAll(); closeFx(); rerender();
+});
+document.getElementById("fxReset").addEventListener("click", ()=>{
+  if(!fxState) return;
+  if(fxState.kind === "sys"){
+    fxInput.value = DEFAULT_FORMULAS[fxState.i];
+  }else{
+    delete customItems[fxState.i].qtyFormula;
+    fxInput.value = String(customItems[fxState.i].qty || 0);
+  }
+  updateFxResult();
+});
+fxModal.addEventListener("click", e=>{ if(e.target === fxModal) closeFx(); });
+
+/* =========================================================
+ *  工具函数
+ * ========================================================= */
+function money(n){
+  if(!Number.isFinite(n)) return "0.00";
+  return n.toLocaleString("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function round2(n){ return Math.round(n*100)/100; }
+function fmtQty(n){
+  if(!Number.isFinite(n)) return "—";
+  return Math.abs(n%1)<1e-9 ? String(Math.round(n)) : n.toFixed(2);
+}
+function esc(s){ if(s==null)return""; return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function escAttr(s){ if(s==null)return""; return esc(s).replace(/"/g,"&quot;"); }
+
+/* =========================================================
+ *  CSV 导出（含设备清单 + 汇总 BOM + 各设备明细）
+ * ========================================================= */
+function exportCSV(){
+  const lines = [];
+  lines.push(["张力围栏 · 多设备成本清单"]);
+  lines.push([`生成时间: ${new Date().toLocaleString("zh-CN")}`]);
+  lines.push([]);
+  lines.push(["产品规格参数（共享）"]);
+  for(const k in DEFAULT_PARAMS){
+    lines.push([DEFAULT_PARAMS[k].label, params[k], DEFAULT_PARAMS[k].u, "变量名: "+k]);
+  }
+  if(customParams.length){
+    lines.push([]);
+    lines.push(["自定义参数"]);
+    customParams.forEach(cp=>{
+      lines.push([cp.label || cp.key, cp.value, cp.unit||"", "变量名: "+cp.key, "组: "+(cp.group||"_misc")]);
+    });
+  }
+
+  /* 设备清单 */
+  lines.push([]);
+  lines.push(["设备列表"]);
+  lines.push(["序号","设备名称","模式","套数","防区数","单套总长(m)","本设备总长(m)","主螺旋柱(根)","本设备总价(元)"]);
+  let allCost = 0;
+  equipmentList.forEach((e, i)=>{
+    const d = derivedFor(e);
+    const cost = equipCost(e);
+    allCost += cost;
+    lines.push([i+1, e.name, e.mode==="single"?"单防区":"双防区", e.sets, e.zones.length,
+                round2(d.totalZoneLen), round2(d.totalLen), d.mainPoles*d.sets, cost.toFixed(2)]);
+  });
+  // 每台设备的防区明细
+  lines.push([]);
+  lines.push(["设备防区明细"]);
+  lines.push(["设备","防区序号","防区名称","长度(m)","主螺旋柱(根)"]);
+  equipmentList.forEach(e=>{
+    e.zones.forEach((z, j)=>{
+      lines.push([e.name, j+1, z.name, +z.length||0, zonePoles(z, params.mainSpacing)]);
+    });
+  });
+
+  /* 汇总 BOM */
+  lines.push([]);
+  lines.push(["全部设备 BOM 汇总"]);
+  const headers = ["序号","分类","类型","部件名称","规格","单位","数量(合计)","单价(元)","小计(元)","数量公式","备注"];
+  equipmentList.forEach(e=>{ headers.push(`数量:${e.name}`); });
+  lines.push(headers);
+
+  const sysBySec = {};
+  BOM.forEach((it,i)=>{
+    (sysBySec[it.sec] = sysBySec[it.sec] || []).push({it, i});
+  });
+  const cusBySec = {};
+  customItems.forEach((c, ci)=>{
+    const sec = c.sec || "其他自定义";
+    (cusBySec[sec] = cusBySec[sec] || []).push({c, ci});
+  });
+  const orderedSecs = SECTIONS.map(s=>s.sec);
+  const extraSecs   = Object.keys(cusBySec).filter(s=>!orderedSecs.includes(s));
+  const allSecs     = orderedSecs.concat(extraSecs);
+
+  let seq=1, std=0, opt=0, cusOther=0;
+  for(const sec of allSecs){
+    const sysRows = sysBySec[sec] || [];
+    const cusRows = cusBySec[sec] || [];
+    const t = sectionType(sec);
+    const typeText = t === "std" ? "标准" : (t === "opt" ? "选配" : "自定义");
+    for(const {it, i} of sysRows){
+      const price = priceOverrides[i] !== undefined ? priceOverrides[i] : it.price;
+      const breakdown = equipmentList.map(e=>sysRowQty(i, e));
+      const qty = breakdown.reduce((a,b)=>a+b, 0);
+      const sub = qty*price;
+      if(t === "std") std += sub; else if(t === "opt") opt += sub;
+      const row = [seq++, sec, typeText, it.name, it.spec, it.unit,
+                   fmtQty(qty), price, sub.toFixed(2), rowFormula(i), it.note];
+      breakdown.forEach(q=>row.push(fmtQty(q)));
+      lines.push(row);
+    }
+    cusRows.forEach(({c, ci}, n)=>{
+      const q = cusRowQty(c);
+      const sub = q*(Number(c.price)||0);
+      if(t === "std") std += sub; else if(t === "opt") opt += sub; else cusOther += sub;
+      const row = [`+${n+1}`, sec, "自定义", c.name, c.spec, c.unit,
+                   fmtQty(q), c.price, sub.toFixed(2),
+                   c.qtyFormula||String(c.qty||0), c.note];
+      // 自定义项不按设备分解（在 active 设备求值），各设备列留空
+      equipmentList.forEach(()=>row.push(""));
+      lines.push(row);
+    });
+  }
+  lines.push([]);
+  lines.push(["标准合计","","","","","","","", std.toFixed(2)]);
+  lines.push(["选配合计","","","","","","","", opt.toFixed(2)]);
+  lines.push(["其他自定义合计","","","","","","","", cusOther.toFixed(2)]);
+  lines.push(["全表合计","","","","","","","", (std+opt+cusOther).toFixed(2)]);
+
+  const csv = "﻿" + lines.map(r=>r.map(csvCell).join(",")).join("\r\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const ts = new Date().toISOString().slice(0,16).replace(/[:T]/g,"-");
+  a.href = url; a.download = `张力围栏BOM_${ts}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+function csvCell(v){
+  if(v==null) return "";
+  const s = String(v);
+  return /[",\r\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+
+/* =========================================================
+ *  顶部按钮 + 视图切换
+ * ========================================================= */
+document.getElementById("btnExport").addEventListener("click", exportCSV);
+document.getElementById("btnPrint").addEventListener("click", ()=>window.print());
+document.getElementById("btnReset").addEventListener("click", ()=>{
+  if(!confirm("重置：内置参数恢复默认、单价/公式覆盖清空、设备列表恢复为一台默认设备。\n（自定义参数与自定义子项保留）")) return;
+  for(const k in DEFAULT_PARAMS) params[k] = DEFAULT_PARAMS[k].v;
+  priceOverrides = {};
+  formulaOverrides = {};
+  equipmentList = [defaultEquipment(1)];
+  activeEquipId = equipmentList[0].id;
+  saveAll();
+  renderParams(); rerender();
+});
+document.querySelectorAll("#modeSwitch button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    viewMode = b.dataset.mode;
+    saveAll(); rerender();
+  });
+});
+
+/* 初始化 */
+renderParams();
+rerender();
+</script>
+
+</body>
+</html>
