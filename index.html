@@ -330,6 +330,9 @@
   .sync-ind.saving{color:var(--warn)}
   .sync-ind.saved{color:var(--ok)}
   .sync-ind.offline,.sync-ind.error{color:var(--bad);background:#fef2f2}
+  .mem-list{border:1px solid var(--line);border-radius:6px;max-height:240px;overflow:auto}
+  .mem-row{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #f0f2f7}
+  .mem-row:last-child{border-bottom:none}
 </style>
 </head>
 <body>
@@ -477,6 +480,24 @@
       <span style="flex:1"></span>
       <button id="userModalCancel">取消</button>
       <button id="userModalSave" class="primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 项目成员管理（仅 admin） -->
+<div id="memberModal" class="modal hidden">
+  <div class="modal-card" style="max-width:480px">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="memberModalTitle">成员管理</div>
+        <div class="modal-sub">被分配的成员可访问该项目；admin 默认可见全部</div>
+      </div>
+      <button class="x-btn" id="memberModalClose">×</button>
+    </div>
+    <div class="modal-body" id="memberBox">加载中…</div>
+    <div class="fx-actions">
+      <span style="flex:1"></span>
+      <button id="memberModalDone" class="primary">完成</button>
     </div>
   </div>
 </div>
@@ -1295,6 +1316,7 @@ function renderProjectsView(){
       pop.innerHTML = `
         <button data-act="open">▶ 进入项目</button>
         <button data-act="edit">✎ 编辑项目信息</button>
+        ${isAdmin() ? '<button data-act="members">👥 成员管理</button>' : ''}
         <button data-act="dup">⎘ 复制项目（连同设备）</button>
         <hr>
         <button data-act="del" class="danger">× 删除项目</button>`;
@@ -1305,6 +1327,7 @@ function renderProjectsView(){
           const act = b.dataset.act;
           if(act === "open") enterProject(pid);
           else if(act === "edit") openProjectEditor(pid);
+          else if(act === "members") openMemberModal(pid);
           else if(act === "dup")  duplicateProject(pid);
           else if(act === "del")  deleteProject(pid);
           pop.remove();
@@ -2241,6 +2264,65 @@ document.getElementById("userModal").addEventListener("click", e=>{ if(e.target.
 document.getElementById("uF_pwd").addEventListener("keydown", e=>{
   if(e.key === "Enter"){ e.preventDefault(); saveUserModal(); }
 });
+
+/* =========================================================
+ *  项目成员管理（阶段 2.5，仅 admin）
+ * ========================================================= */
+let memberPid = null;
+async function openMemberModal(pid){
+  if(!isAdmin()){ alert("仅管理员可管理成员。"); return; }
+  memberPid = pid;
+  const p = projectList.find(x=>x.id===pid);
+  document.getElementById("memberModalTitle").textContent = "成员管理 — " + (p ? p.name : "");
+  document.getElementById("memberModal").classList.remove("hidden");
+  await renderMembers();
+}
+function closeMemberModal(){ document.getElementById("memberModal").classList.add("hidden"); memberPid = null; }
+async function renderMembers(){
+  const box = document.getElementById("memberBox");
+  box.innerHTML = "加载中…";
+  let members = [], allUsers = [];
+  try{
+    members  = (await api(`projects/${memberPid}/members`)).members || [];
+    allUsers = (await api("users")).users || [];
+  }catch(e){ box.innerHTML = `<div style="color:var(--bad)">加载失败：${esc(e.message)}</div>`; return; }
+  const memberIds = new Set(members.map(m=>m.id));
+  const candidates = allUsers.filter(u=>!memberIds.has(u.id));
+  let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:6px">当前成员（${members.length}）</div><div class="mem-list">`;
+  members.forEach(m=>{
+    const isSuper = m.username === "admin";
+    html += `<div class="mem-row">
+      <span><b>${esc(m.username)}</b> <span class="user-tag ${m.role==='admin'?'admin':'user'}">${m.role==='admin'?'管理员':'普通用户'}</span></span>
+      <button class="u-op danger" data-rm="${escAttr(m.id)}" ${isSuper?'disabled title="超级管理员默认可见全部，无需移除"':''}>移除</button>
+    </div>`;
+  });
+  if(members.length===0) html += `<div style="padding:10px;color:var(--muted)">暂无成员</div>`;
+  html += `</div>
+    <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+      <select id="memberAddSel" style="flex:1;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px">
+        <option value="">+ 选择用户加入…</option>
+        ${candidates.map(u=>`<option value="${escAttr(u.id)}">${esc(u.username)}${u.role==='admin'?'（管理员）':''}</option>`).join("")}
+      </select>
+      <button id="memberAddBtn" class="act primary">添加</button>
+    </div>`;
+  box.innerHTML = html;
+  box.querySelectorAll("button[data-rm]").forEach(b=>{
+    b.addEventListener("click", async ()=>{
+      if(b.disabled) return;
+      try{ await api(`projects/${memberPid}/members/${b.dataset.rm}`, {method:"DELETE"}); await renderMembers(); }
+      catch(e){ alert("移除失败：" + e.message); }
+    });
+  });
+  document.getElementById("memberAddBtn").addEventListener("click", async ()=>{
+    const uid = document.getElementById("memberAddSel").value;
+    if(!uid) return;
+    try{ await api(`projects/${memberPid}/members`, {method:"POST", body:{userId:uid}}); await renderMembers(); }
+    catch(e){ alert("添加失败：" + e.message); }
+  });
+}
+document.getElementById("memberModalClose").addEventListener("click", closeMemberModal);
+document.getElementById("memberModalDone").addEventListener("click", closeMemberModal);
+document.getElementById("memberModal").addEventListener("click", e=>{ if(e.target.id==="memberModal") closeMemberModal(); });
 
 /* =========================================================
  *  同步层（阶段 2.3 / 2.4）
