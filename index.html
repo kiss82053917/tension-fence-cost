@@ -194,14 +194,37 @@
     font-size:11.5px;color:var(--muted)}
   .fx-help code{background:#fff;color:var(--brand-2);padding:0 4px;border-radius:3px;
     font-family:Menlo,Consolas,monospace}
-  .fx-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;max-height:240px;overflow:auto}
-  .fx-chip{border:1px solid var(--line);background:#fff;padding:3px 8px;border-radius:14px;
-    cursor:pointer;font-size:11.5px;font-family:Menlo,Consolas,monospace;color:var(--brand-2);
-    display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+  .fx-chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 4px}
+  .fx-chip{border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer;
+    display:inline-flex;flex-direction:column;align-items:flex-start;gap:0;padding:5px 9px;line-height:1.3}
   .fx-chip:hover{border-color:var(--brand);background:var(--soft)}
-  .fx-chip .lab{color:var(--muted);font-family:inherit;font-size:11px}
-  .fx-chip.derived{background:var(--green);color:#15803d}
-  .fx-chip.custom{background:#dcfce7;color:#166534}
+  .fx-chip .cn{color:var(--ink);font-weight:600;font-size:12.5px}
+  .fx-chip .val{color:var(--ok);font-variant-numeric:tabular-nums;font-size:11px}
+  .fx-chip .code{color:var(--muted);font-family:Menlo,Consolas,monospace;font-size:10px}
+  .fx-chip.derived{background:#f0fdf4}  .fx-chip.derived:hover{background:#dcfce7}
+  .fx-chip.custom{background:#ecfeff}    .fx-chip.custom:hover{background:#cffafe}
+  /* 公式编辑器：小白友好 */
+  .fx-intro{font-size:12.5px;color:var(--ink);background:#eff6ff;border:1px solid #c7d2fe;
+    border-radius:6px;padding:8px 10px;margin-bottom:10px;line-height:1.7}
+  .fx-intro b{color:var(--brand-2)}
+  .fx-grp{font-size:11.5px;color:var(--muted);margin:12px 0 5px;font-weight:600}
+  .fx-ops{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 4px}
+  .fx-op{border:1px solid var(--line);background:#fff;border-radius:6px;padding:5px 12px;cursor:pointer;
+    font-size:16px;min-width:42px;color:var(--ink)}
+  .fx-op:hover{background:var(--soft);border-color:var(--brand);color:var(--brand)}
+  .fx-op.txt{font-size:12.5px;color:var(--muted);min-width:0}
+  .fx-presets{display:flex;flex-wrap:wrap;gap:6px}
+  .fx-preset{border:1px dashed var(--brand);background:#f5f8ff;color:var(--brand-2);border-radius:14px;
+    padding:4px 12px;cursor:pointer;font-size:12px}
+  .fx-preset:hover{background:var(--soft)}
+  .fx-adv{font-size:11px;color:var(--muted);margin-top:12px;line-height:1.8}
+  .fx-adv code{background:#f3f4f6;padding:0 4px;border-radius:3px;font-family:Menlo,Consolas,monospace}
+  /* 顶部保存反馈 toast */
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;
+    padding:10px 20px;border-radius:8px;font-size:13.5px;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.25);
+    transition:opacity .3s}
+  .toast.hidden{opacity:0;pointer-events:none}
+  .toast.ok{background:var(--ok)} .toast.warn{background:var(--warn)}
   .fx-actions{padding:12px 18px;border-top:1px solid var(--line);display:flex;align-items:center;gap:8px}
   .fx-actions button{padding:6px 14px;border:1px solid var(--line);background:#fff;border-radius:6px;
     cursor:pointer;font-size:13px}
@@ -412,7 +435,8 @@
     </span>
     <span class="spacer"></span>
     <span class="sync-ind" title="同步状态"></span>
-    <button id="btnExport" class="act primary">导出 CSV</button>
+    <button id="btnSave" class="act primary" title="立刻保存到云端（Ctrl/⌘+S）">💾 保存</button>
+    <button id="btnExport" class="act">导出 CSV</button>
     <button id="btnVersions" class="act">🕐 版本</button>
     <button id="btnLogs" class="act">📋 日志</button>
     <button id="btnPrint"  class="act">打印</button>
@@ -444,6 +468,8 @@
   右侧 BOM 默认"全部设备汇总"显示真实总用量，切换到"单设备视图"可查看某一台设备的明细。
   <br>BOM 任意行右侧 <code>ƒ</code> 按钮可编辑数量公式（变量含 <code>zoneLen1..N</code>、<code>totalZoneLen</code>、<code>sets</code> 及自定义参数）。
 </footer>
+
+<div id="toast" class="toast hidden"></div>
 
 <!-- 项目信息编辑 -->
 <div id="prjModal" class="modal hidden">
@@ -568,22 +594,27 @@
       <button class="x-btn" id="fxClose">×</button>
     </div>
     <div class="modal-body">
+      <div class="fx-intro">填「这一项<b>每套设备要用几个</b>」。可以直接打数字（比如 <b>6</b>），也可以点下面的<b>蓝/绿色按钮</b>把参数加进来，中间用 <b>＋ − × ÷</b> 连接。下面会<b>实时算给你看</b>。</div>
       <div class="fx-input-row">
         <label>数量公式</label>
         <input id="fxInput" type="text" spellcheck="false" autocomplete="off">
       </div>
       <div class="fx-result-row">
-        <span>当前设备结果：</span><b id="fxResult">—</b>
+        <span>这台设备算出来：</span><b id="fxResult">—</b><span>个</span>
         <span id="fxError" class="fx-err"></span>
         <span style="flex:1"></span>
-        <span class="fx-help" style="border:none;padding:0;background:transparent">
-          默认公式：<code id="fxDefault" style="background:#eef2ff"></code>
-        </span>
+        <span style="font-size:11px;color:var(--muted)">默认：<code id="fxDefault" style="background:#eef2ff;padding:0 4px;border-radius:3px"></code></span>
       </div>
-      <div class="fx-help">
-        <div>点击下方变量插入到公式中。可用函数：<code>ceil</code> <code>floor</code> <code>round</code> <code>max</code> <code>min</code> <code>abs</code> <code>sqrt</code> <code>pow</code></div>
-        <div id="fxVars" class="fx-chips"></div>
-      </div>
+
+      <div class="fx-grp">运算符（点一下加进去）</div>
+      <div class="fx-ops" id="fxOps"></div>
+
+      <div class="fx-grp">常用套路（点一下整条套用，再改前面的数字即可）</div>
+      <div class="fx-presets" id="fxPresets"></div>
+
+      <div id="fxVars"></div>
+
+      <div class="fx-adv">想更复杂？可用函数：<code>ceil()</code> 向上取整、<code>floor()</code> 向下取整、<code>round()</code> 四舍五入、<code>max()</code>/<code>min()</code> 取大/取小。例：刺丝按 400 米一卷 → <code>ceil(totalLines*totalZoneLen/400)</code>。</div>
     </div>
     <div class="fx-actions">
       <button id="fxReset" class="danger">恢复默认公式</button>
@@ -1826,29 +1857,52 @@ function closeFx(){ fxModal.classList.add("hidden"); fxState = null; }
 
 function renderFxVars(){
   const DERIVED_LABELS = {
-    totalLen:"本设备总长（含套数）", totalLines:"总线数", mainPoles:"主螺旋柱总数",
-    totalZoneLen:"单套总长", zoneCount:"防区数", sets:"本设备套数",
-    zonesPerPillar:"每柱防区数（双=2/单=1）"
+    sets:"本设备套数", zonesPerPillar:"每柱防区数（双=2/单=1）", totalLines:"总线数",
+    mainPoles:"主螺旋柱总数", totalZoneLen:"单套总长(米)", totalLen:"本设备总长(米)", zoneCount:"防区数"
   };
-  let html = "";
-  for(const k of Object.keys(DEFAULT_PARAMS)){
-    html += `<span class="fx-chip" data-ins="${k}"><b>${k}</b><span class="lab">${esc(DEFAULT_PARAMS[k].label)}</span></span>`;
-  }
-  for(const k of DERIVED_VARS){
-    html += `<span class="fx-chip derived" data-ins="${k}"><b>${k}</b><span class="lab">${DERIVED_LABELS[k]||""}</span></span>`;
-  }
-  activeEquip().zones.forEach((z, i)=>{
-    const k = "zoneLen"+(i+1);
-    html += `<span class="fx-chip derived" data-ins="${k}"><b>${k}</b><span class="lab">${esc(z.name||("防区"+(i+1)))}</span></span>`;
+  const scope = buildScope(activeEquip());
+  const v = k => { const n = scope[k]; return Number.isFinite(+n) ? fmtQty(+n) : "—"; };
+  const chip = (code, label, cls) =>
+    `<span class="fx-chip ${cls||""}" data-ins="${escAttr(code)}" title="点我加进公式">
+       <span class="cn">${esc(label)}</span><span class="val">= ${v(code)}</span><span class="code">${esc(code)}</span></span>`;
+
+  /* 运算符 + 退格/清空 */
+  const ops = [["＋","+"],["−","-"],["×","*"],["÷","/"],["（","("],["）",")"]];
+  document.getElementById("fxOps").innerHTML =
+    ops.map(([lab,ins])=>`<button class="fx-op" data-op="${ins}">${lab}</button>`).join("") +
+    `<button class="fx-op txt" data-back="1">⌫ 退格</button><button class="fx-op txt" data-clear="1">清空</button>`;
+
+  /* 常用套路（整条替换） */
+  const presets = [
+    ["每套 1 个", "1 * sets"],
+    ["每根探测器柱 1 个", "pillarsPerZone * sets"],
+    ["每防区 1 个（双=2）", "pillarsPerZone * zonesPerPillar * sets"],
+    ["每根线 1 个", "totalLines * sets"],
+    ["每根主螺旋柱 1 个", "mainPoles * sets"],
+  ];
+  document.getElementById("fxPresets").innerHTML =
+    presets.map(([lab,f])=>`<button class="fx-preset" data-fill="${escAttr(f)}">${esc(lab)}</button>`).join("");
+
+  /* 变量分组 */
+  const groups = [];
+  groups.push(["本设备数据（自动算出来的）", DERIVED_VARS.map(k=>chip(k, DERIVED_LABELS[k]||k, "derived"))]);
+  const zc = activeEquip().zones.map((z,i)=>chip("zoneLen"+(i+1), (z.name||("防区"+(i+1)))+" 长度", "derived"));
+  if(zc.length) groups.push(["各防区长度（米）", zc]);
+  groups.push(["产品规格参数（左侧可改）", Object.keys(DEFAULT_PARAMS).map(k=>chip(k, DEFAULT_PARAMS[k].label, ""))]);
+  const cps = customParams.filter(c=>c.key);
+  if(cps.length) groups.push(["你的自定义参数", cps.map(c=>chip(c.key, c.label||c.key, "custom"))]);
+  document.getElementById("fxVars").innerHTML =
+    groups.map(([t,chips])=>`<div class="fx-grp">${esc(t)}</div><div class="fx-chips">${chips.join("")}</div>`).join("");
+
+  /* 绑定 */
+  fxModal.querySelectorAll("#fxVars [data-ins]").forEach(c=>c.addEventListener("click", ()=>insertAtCursor(fxInput, c.dataset.ins)));
+  fxModal.querySelectorAll("#fxOps [data-op]").forEach(b=>b.addEventListener("click", ()=>insertAtCursor(fxInput, b.dataset.op)));
+  fxModal.querySelectorAll(".fx-preset").forEach(b=>b.addEventListener("click", ()=>{ fxInput.value = b.dataset.fill; fxInput.focus(); updateFxResult(); }));
+  fxModal.querySelector("#fxOps [data-back]").addEventListener("click", ()=>{
+    fxInput.value = fxInput.value.replace(/\s*(?:[A-Za-z_]\w*|\d+(?:\.\d+)?|[-+*/()])\s*$/, "");
+    fxInput.focus(); updateFxResult();
   });
-  for(const cp of customParams){
-    if(!cp.key) continue;
-    html += `<span class="fx-chip custom" data-ins="${cp.key}"><b>${esc(cp.key)}</b><span class="lab">${esc(cp.label||"")}</span></span>`;
-  }
-  fxVars.innerHTML = html;
-  fxVars.querySelectorAll("[data-ins]").forEach(c=>{
-    c.addEventListener("click", ()=>insertAtCursor(fxInput, c.dataset.ins));
-  });
+  fxModal.querySelector("#fxOps [data-clear]").addEventListener("click", ()=>{ fxInput.value = ""; fxInput.focus(); updateFxResult(); });
 }
 function insertAtCursor(input, text){
   input.focus();
@@ -2639,6 +2693,31 @@ function startRetry(){
     else if(currentUser){ await bootstrapData(); fixActiveRefs(); renderCurrentView(); }
   }, 12000);
 }
+
+/* ===== 手动保存 + 顶部提示 toast ===== */
+let toastTimer = null;
+function showToast(msg, kind){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.className = "toast " + (kind || "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.add("hidden"), 2400);
+}
+async function manualSave(){
+  clearTimeout(syncTimer);
+  cacheToLocal();
+  if(!serverSnapshot){ showToast("已暂存到本机（未连服务器）", "warn"); return; }
+  showToast("保存中…");
+  await flushSync();
+  if(lsGet("tf_unsynced", false)) showToast("已存到本机，联网后会自动上传", "warn");
+  else showToast("✓ 已保存到云端", "ok");
+}
+document.getElementById("btnSave").addEventListener("click", manualSave);
+document.addEventListener("keydown", e=>{
+  if((e.metaKey || e.ctrlKey) && (e.key === "s" || e.key === "S")){
+    e.preventDefault();
+    if(currentUser && viewName === "project") manualSave();
+  }
+});
 
 /* ===== 启动：先问后端当前会话，再进应用 ===== */
 (async function boot(){
