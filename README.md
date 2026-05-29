@@ -24,3 +24,7 @@
 ## 部署
 
 静态文件，无后端，无构建步骤。Cloudflare Pages / GitHub Pages / Vercel / Netlify / 阿里云 OSS / 腾讯云 COS 均可。
+
+## 继续开发 / 交接
+
+接手开发请先读 [`HANDOFF.md`](./HANDOFF.md)：内含数据模型、核心函数地图、BOM 与公式引擎说明、已完成功能清单、以及未完成的阶段二（后端 + 多人协同）/ 阶段三（操作日志 + 版本回滚）规格。
