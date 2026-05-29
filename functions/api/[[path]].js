@@ -239,6 +239,25 @@ export async function onRequest(context) {
     }
   }
 
+  /* ---- 一次性拉取当前用户可见的全部数据（前端启动用） ---- */
+  if (segs[0] === "bootstrap" && method === "GET") {
+    let projects, equipment, custom;
+    if (me.role === "admin") {
+      projects  = (await db.prepare("SELECT * FROM projects ORDER BY created_at ASC").all()).results;
+      equipment = (await db.prepare("SELECT * FROM equipment ORDER BY pos ASC, updated_at ASC").all()).results;
+      custom    = (await db.prepare("SELECT * FROM custom_items ORDER BY pos ASC, updated_at ASC").all()).results;
+    } else {
+      projects  = (await db.prepare("SELECT p.* FROM projects p JOIN project_members m ON m.project_id=p.id WHERE m.user_id=? ORDER BY p.created_at ASC").bind(me.id).all()).results;
+      equipment = (await db.prepare("SELECT e.* FROM equipment e JOIN project_members m ON m.project_id=e.project_id WHERE m.user_id=? ORDER BY e.pos ASC, e.updated_at ASC").bind(me.id).all()).results;
+      custom    = (await db.prepare("SELECT c.* FROM custom_items c JOIN project_members m ON m.project_id=c.project_id WHERE m.user_id=? ORDER BY c.pos ASC, c.updated_at ASC").bind(me.id).all()).results;
+    }
+    equipment.forEach(e => { try { e.zones = JSON.parse(e.zones); } catch (x) { e.zones = []; } });
+    const srows = (await db.prepare("SELECT k, v FROM settings").all()).results;
+    const settings = { params: {}, prices: {}, formulas: {}, cparams: [] };
+    for (const r of srows) { try { settings[r.k] = JSON.parse(r.v); } catch (x) {} }
+    return json({ projects, equipment, custom, settings });
+  }
+
   /* ---- 全局共享设置（任何登录用户可读写，后写为准） ---- */
   if (segs[0] === "settings") {
     if (segs.length === 1 && method === "GET") {
@@ -275,7 +294,7 @@ export async function onRequest(context) {
       const body = await readJson(request);
       const name = (body.name || "").trim();
       if (!name) return bad("项目名称不能为空");
-      const id = crypto.randomUUID();
+      const id = (typeof body.id === "string" && body.id) ? body.id : crypto.randomUUID();
       const now = Date.now();
       await db.prepare("INSERT INTO projects (id, name, customer, description, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?)")
         .bind(id, name, (body.customer || "").trim(), (body.description || "").trim(), me.id, now, now).run();
@@ -328,7 +347,7 @@ export async function onRequest(context) {
         }
         if (segs.length === 3 && method === "POST") {
           const body = await readJson(request);
-          const id = crypto.randomUUID();
+          const id = (typeof body.id === "string" && body.id) ? body.id : crypto.randomUUID();
           const zones = Array.isArray(body.zones) ? body.zones : [];
           const now = Date.now();
           await db.prepare("INSERT INTO equipment (id, project_id, name, sets, mode, zones, pos, updated_at) VALUES (?,?,?,?,?,?,?,?)")
@@ -348,7 +367,7 @@ export async function onRequest(context) {
         }
         if (segs.length === 3 && method === "POST") {
           const body = await readJson(request);
-          const id = crypto.randomUUID();
+          const id = (typeof body.id === "string" && body.id) ? body.id : crypto.randomUUID();
           const now = Date.now();
           await db.prepare("INSERT INTO custom_items (id, project_id, sec, name, spec, unit, qty, qty_formula, price, note, pos, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
             .bind(id, pid, body.sec || "其他自定义", body.name || "", body.spec || "", body.unit || "个",

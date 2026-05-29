@@ -326,6 +326,10 @@
   .u-op.danger:hover{background:#fee2e2;border-color:var(--bad)}
   .u-op:disabled{opacity:.4;cursor:not-allowed}
   header .stat.user b{color:var(--brand-2)}
+  .sync-ind{font-size:12px;color:var(--muted);padding:2px 8px;border-radius:6px;white-space:nowrap}
+  .sync-ind.saving{color:var(--warn)}
+  .sync-ind.saved{color:var(--ok)}
+  .sync-ind.offline,.sync-ind.error{color:var(--bad);background:#fef2f2}
 </style>
 </head>
 <body>
@@ -359,6 +363,7 @@
     <button id="btnNewPrj" class="act primary">+ 新建项目</button>
     <button id="btnPrjExport" class="act">导出 CSV</button>
     <button id="btnUsers" class="act" style="display:none">👤 用户管理</button>
+    <span class="sync-ind" title="同步状态"></span>
     <span class="stat user" id="curUserChip" title="当前登录用户">—</span>
     <button id="btnLogout" class="act">退出登录</button>
   </header>
@@ -382,6 +387,7 @@
       <button data-mode="single">🔍 单设备视图</button>
     </span>
     <span class="spacer"></span>
+    <span class="sync-ind" title="同步状态"></span>
     <button id="btnExport" class="act primary">导出 CSV</button>
     <button id="btnPrint"  class="act">打印</button>
     <button id="btnReset"  class="act">重置当前项目</button>
@@ -677,7 +683,7 @@ function loadParams(){
 }
 function loadCustom(){
   const arr = lsGet("tf_custom", []);
-  return (Array.isArray(arr)?arr:[]).map(c=>({...c, sec: c.sec || "其他自定义"}));
+  return (Array.isArray(arr)?arr:[]).map(c=>({ id: c.id || uid(), ...c, sec: c.sec || "其他自定义" }));
 }
 function loadCustomParams(){
   const arr = lsGet("tf_cparams", []);
@@ -755,7 +761,8 @@ if(!equipmentList.some(e=>e.id===activeEquipId && e.projectId===activeProjectId)
   activeEquipId = first ? first.id : null;
 }
 
-function saveAll(){
+/* 写本地缓存（离线可用 + UI 状态）。数据实体另由同步层推送到后端。 */
+function cacheToLocal(){
   lsSet("tf_params", params);
   lsSet("tf_prices", priceOverrides);
   lsSet("tf_formulas", formulaOverrides);
@@ -767,6 +774,11 @@ function saveAll(){
   lsSet("tf_projects", projectList);
   lsSet("tf_activePrj", activeProjectId);
   lsSet("tf_viewName", viewName);
+}
+/* 所有改动入口：写缓存 + 调度防抖同步（同步层见文件末尾的「同步」段） */
+function saveAll(){
+  cacheToLocal();
+  if(typeof scheduleSync === "function") scheduleSync();
 }
 
 /* 当前项目相关的过滤器 */
@@ -1343,7 +1355,7 @@ function duplicateProject(pid){
                         zones: e.zones.map(z=>({...z}))});
   });
   customItems.filter(c=>c.projectId===pid).forEach(c=>{
-    customItems.push({...c, projectId: newPid});
+    customItems.push({...c, id: uid(), projectId: newPid});
   });
   saveAll();
   renderProjectsView();
@@ -1640,7 +1652,7 @@ function renderBOM(){
   });
   root.querySelectorAll("[data-addsec]").forEach(b=>{
     b.addEventListener("click", ()=>{
-      customItems.push({projectId: activeProjectId, sec:b.dataset.addsec, name:"", spec:"", unit:"个", qty:1, price:0, note:""});
+      customItems.push({id: uid(), projectId: activeProjectId, sec:b.dataset.addsec, name:"", spec:"", unit:"个", qty:1, price:0, note:""});
       saveAll(); rerender();
     });
   });
@@ -2055,7 +2067,7 @@ async function doLogin(name, pwd){
     currentUser = user;
     err.textContent = ""; err.style.color = "";
     document.getElementById("loginPwd").value = "";
-    mountApp();
+    await mountApp();
   }catch(e){
     err.style.color = "var(--bad)"; err.textContent = e.message;
   }
@@ -2082,11 +2094,13 @@ function updateUserChrome(){
   if(bu) bu.style.display = isAdmin() ? "" : "none";
 }
 
-/* 登录成功后进入应用（沿用上次保存的视图） */
-function mountApp(){
+/* 登录成功后进入应用：先从后端加载数据，再按上次保存的视图渲染 */
+async function mountApp(){
   document.getElementById("viewLogin").classList.add("hidden");
   document.getElementById("viewUsers").classList.add("hidden");
   updateUserChrome();
+  await bootstrapData();   // 从服务器拉取（或首登迁移本地数据）
+  fixActiveRefs();
   if(viewName === "project" && activeProject()){
     document.getElementById("viewProjects").classList.add("hidden");
     document.getElementById("viewProject").classList.remove("hidden");
@@ -2228,11 +2242,176 @@ document.getElementById("uF_pwd").addEventListener("keydown", e=>{
   if(e.key === "Enter"){ e.preventDefault(); saveUserModal(); }
 });
 
+/* =========================================================
+ *  同步层（阶段 2.3 / 2.4）
+ *  - bootstrapData：登录后从后端拉全量；服务端空+本地有数据则首登迁移
+ *  - saveAll() = cacheToLocal() + scheduleSync()（防抖）
+ *  - flushSync：对比 serverSnapshot 与当前内存，发细粒度 POST/PATCH/DELETE
+ *  - 离线：缓存本地、显示「离线」、定时重试；冲突后写为准
+ * ========================================================= */
+let serverSnapshot = null;     // 上次与服务器一致的数据（client 形态），用于 diff
+let syncTimer = null, retryTimer = null, syncBusy = false;
+
+function defaultParamValues(){ const o = {}; for(const k in DEFAULT_PARAMS) o[k] = DEFAULT_PARAMS[k].v; return o; }
+function setSyncState(s){
+  const map = { saving:["saving","● 同步中…"], saved:["saved","✓ 已保存"],
+    offline:["offline","⚠ 离线·已存本地"], error:["error","⚠ 同步出错"], idle:["",""] };
+  const [cls,txt] = map[s] || ["",""];
+  document.querySelectorAll(".sync-ind").forEach(el=>{ el.className = "sync-ind "+cls; el.textContent = txt; });
+}
+
+/* 服务端返回 → client 形态（字段名与内存一致） */
+function serverToClient(data){
+  return {
+    projects: (data.projects||[]).map(p=>({ id:p.id, name:p.name, customer:p.customer||"",
+      description:p.description||"", createdAt:p.created_at, updatedAt:p.updated_at })),
+    equipment: (data.equipment||[]).map(e=>({ id:e.id, projectId:e.project_id, name:e.name,
+      sets:+e.sets||1, mode:e.mode==="single"?"single":"double",
+      zones: Array.isArray(e.zones)? e.zones.map(z=>({name:String(z.name||""),length:+z.length||0})) : [] })),
+    custom: (data.custom||[]).map(c=>({ id:c.id, projectId:c.project_id, sec:c.sec||"其他自定义",
+      name:c.name||"", spec:c.spec||"", unit:c.unit||"个", qty:+c.qty||0,
+      qtyFormula:c.qty_formula||undefined, price:+c.price||0, note:c.note||"" })),
+    settings: {
+      params: Object.assign(defaultParamValues(), (data.settings&&data.settings.params)||{}),
+      prices: (data.settings&&data.settings.prices)||{},
+      formulas: (data.settings&&data.settings.formulas)||{},
+      cparams: (data.settings&&data.settings.cparams)||[],
+    },
+  };
+}
+/* 当前内存的深拷贝快照（与 serverToClient 同形态） */
+function snapshotNow(){
+  return {
+    projects: projectList.map(p=>({id:p.id,name:p.name,customer:p.customer||"",description:p.description||"",createdAt:p.createdAt,updatedAt:p.updatedAt})),
+    equipment: equipmentList.map(e=>({id:e.id,projectId:e.projectId,name:e.name,sets:+e.sets||1,mode:e.mode,zones:(e.zones||[]).map(z=>({name:z.name,length:+z.length||0}))})),
+    custom: customItems.map(c=>({id:c.id,projectId:c.projectId,sec:c.sec,name:c.name,spec:c.spec,unit:c.unit,qty:+c.qty||0,qtyFormula:c.qtyFormula||undefined,price:+c.price||0,note:c.note})),
+    settings: { params:{...params}, prices:{...priceOverrides}, formulas:{...formulaOverrides}, cparams:customParams.map(c=>({...c})) },
+  };
+}
+function applyServerData(c){
+  projectList = c.projects; equipmentList = c.equipment; customItems = c.custom;
+  params = c.settings.params; priceOverrides = c.settings.prices;
+  formulaOverrides = c.settings.formulas; customParams = c.settings.cparams;
+}
+function fixActiveRefs(){
+  if(!projectList.some(p=>p.id===activeProjectId)) activeProjectId = projectList[0] ? projectList[0].id : null;
+  const cur = currentEquipments();
+  if(!cur.some(e=>e.id===activeEquipId)) activeEquipId = cur[0] ? cur[0].id : null;
+  if(!projectList.length) viewName = "projects";
+}
+function renderCurrentView(){
+  if(viewName==="project" && activeProject()){
+    document.getElementById("viewProjects").classList.add("hidden");
+    document.getElementById("viewProject").classList.remove("hidden");
+    document.getElementById("hdrPrjName").textContent = activeProject().name;
+    renderParams(); rerender();
+  }else{
+    document.getElementById("viewProject").classList.add("hidden");
+    document.getElementById("viewProjects").classList.remove("hidden");
+    renderProjectsView();
+  }
+}
+
+async function bootstrapData(){
+  let data;
+  try{ data = await api("bootstrap"); }
+  catch(e){ setSyncState("offline"); startRetry(); return; }   // 后端不可达：用本地缓存
+  const serverEmpty = (data.projects||[]).length === 0;
+  const unsynced = lsGet("tf_unsynced", false);
+  const localHas = projectList.length > 0;
+
+  if((unsynced || serverEmpty) && localHas){
+    // 本地有未同步改动 / 首登迁移：以本地为准把差异推上去（后写为准）
+    serverSnapshot = serverToClient(data);   // 服务端现状作为 diff 基准
+    lsSet("tf_unsynced", false);
+    await flushSync(true);
+    return;
+  }
+  // 正常：用服务端数据覆盖内存
+  applyServerData(serverToClient(data));
+  serverSnapshot = snapshotNow();
+  cacheToLocal();
+  setSyncState("saved");
+}
+
+function scheduleSync(){
+  if(!serverSnapshot){ return; }     // 还没 bootstrap（离线或未登录）→ 仅缓存
+  setSyncState("saving");
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(()=>flushSync(false), 700);
+}
+function changed(a, b){ return JSON.stringify(a) !== JSON.stringify(b); }
+
+/* 对比 prev(服务器) 与 cur(内存)，产出有序的细粒度调用 */
+function diffToCalls(prev, cur){
+  const calls = [];
+  const idMap = arr => { const m={}; arr.forEach(x=>m[x.id]=x); return m; };
+  const posMap = arr => { const byPrj={}, m={}; arr.forEach(x=>{ const i=(byPrj[x.projectId]||0); m[x.id]=i; byPrj[x.projectId]=i+1; }); return m; };
+  const pPrev=idMap(prev.projects), pCur=idMap(cur.projects);
+  const ePrev=idMap(prev.equipment), eCur=idMap(cur.equipment);
+  const cPrev=idMap(prev.custom), cCur=idMap(cur.custom);
+  const ePosCur=posMap(cur.equipment), ePosPrev=posMap(prev.equipment);
+  const cPosCur=posMap(cur.custom),   cPosPrev=posMap(prev.custom);
+
+  for(const p of cur.projects){ if(!pPrev[p.id])
+    calls.push({method:"POST", path:"projects", body:{id:p.id,name:p.name,customer:p.customer,description:p.description}}); }
+  for(const p of cur.projects){ const o=pPrev[p.id];
+    if(o && (o.name!==p.name||o.customer!==p.customer||o.description!==p.description))
+      calls.push({method:"PATCH", path:"projects/"+p.id, body:{name:p.name,customer:p.customer,description:p.description}}); }
+  const deletedProjects = prev.projects.filter(p=>!pCur[p.id]).map(p=>p.id);
+  const isDelPrj = id => deletedProjects.includes(id);
+
+  for(const e of cur.equipment){ const o=ePrev[e.id], pos=ePosCur[e.id];
+    if(!o) calls.push({method:"POST", path:"projects/"+e.projectId+"/equipment", body:{id:e.id,name:e.name,sets:e.sets,mode:e.mode,zones:e.zones,pos}});
+    else if(o.name!==e.name||o.sets!==e.sets||o.mode!==e.mode||changed(o.zones,e.zones)||ePosPrev[e.id]!==pos)
+      calls.push({method:"PATCH", path:"equipment/"+e.id, body:{name:e.name,sets:e.sets,mode:e.mode,zones:e.zones,pos}}); }
+  for(const c of cur.custom){ const o=cPrev[c.id], pos=cPosCur[c.id];
+    if(!o) calls.push({method:"POST", path:"projects/"+c.projectId+"/custom", body:{id:c.id,sec:c.sec,name:c.name,spec:c.spec,unit:c.unit,qty:c.qty,qtyFormula:c.qtyFormula||null,price:c.price,note:c.note,pos}});
+    else if(o.sec!==c.sec||o.name!==c.name||o.spec!==c.spec||o.unit!==c.unit||o.qty!==c.qty||(o.qtyFormula||"")!==(c.qtyFormula||"")||o.price!==c.price||o.note!==c.note||cPosPrev[c.id]!==pos)
+      calls.push({method:"PATCH", path:"custom/"+c.id, body:{sec:c.sec,name:c.name,spec:c.spec,unit:c.unit,qty:c.qty,qtyFormula:c.qtyFormula||null,price:c.price,note:c.note,pos}}); }
+
+  for(const e of prev.equipment){ if(!eCur[e.id] && !isDelPrj(e.projectId)) calls.push({method:"DELETE", path:"equipment/"+e.id}); }
+  for(const c of prev.custom){ if(!cCur[c.id] && !isDelPrj(c.projectId)) calls.push({method:"DELETE", path:"custom/"+c.id}); }
+  for(const id of deletedProjects) calls.push({method:"DELETE", path:"projects/"+id});
+
+  for(const k of ["params","prices","formulas","cparams"]){
+    if(changed(prev.settings[k], cur.settings[k])) calls.push({method:"PUT", path:"settings/"+k, body:cur.settings[k]});
+  }
+  return calls;
+}
+
+async function flushSync(){
+  if(!serverSnapshot) return;
+  if(syncBusy){ scheduleSync(); return; }
+  const cur = snapshotNow();
+  const calls = diffToCalls(serverSnapshot, cur);
+  if(calls.length === 0){ setSyncState("saved"); return; }
+  syncBusy = true; setSyncState("saving");
+  try{
+    for(const c of calls){ await api(c.path, {method:c.method, body:c.body}); }
+    serverSnapshot = cur; lsSet("tf_unsynced", false);
+    setSyncState("saved"); cacheToLocal();
+  }catch(e){
+    lsSet("tf_unsynced", true); setSyncState("offline"); startRetry();
+  }finally{ syncBusy = false; }
+}
+
+/* 离线重试：每 12s 试连一次，连上后补推（或补载） */
+function startRetry(){
+  if(retryTimer) return;
+  retryTimer = setInterval(async ()=>{
+    try{ await api("me"); }catch(e){ return; }
+    clearInterval(retryTimer); retryTimer = null;
+    if(serverSnapshot){ flushSync(); }
+    else if(currentUser){ await bootstrapData(); fixActiveRefs(); renderCurrentView(); }
+  }, 12000);
+}
+
 /* ===== 启动：先问后端当前会话，再进应用 ===== */
 (async function boot(){
   try{
     const { user } = await api("me");
-    if(user){ currentUser = user; mountApp(); return; }
+    if(user){ currentUser = user; await mountApp(); return; }
     showLogin();
   }catch(e){
     // 后端不可达（如直接以 file:// 双击打开）：提示走服务端访问
