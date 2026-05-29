@@ -10,4 +10,4 @@ compatibility_date = "2024-09-23"
 [[d1_databases]]
 binding = "DB"
 database_name = "tension-fence-cost-db"
-database_id = "local-placeholder-id"
+database_id = "26db9847-32b7-49fa-a3d7-a6be99d80932"
