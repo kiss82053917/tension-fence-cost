@@ -231,15 +231,15 @@ git push          # 触发 Cloudflare 自动部署
 - ✅ **2.1 鉴权与用户后端**（已完成并验证）：Cloudflare Pages Functions + D1；用户/会话表；登录/注销/会话/用户增删改查/重置密码 API；PBKDF2 密码哈希；首登种入 admin/adminyy；前端登录与用户管理改调后端。详见下方第 13 节。
 - ⬜ **2.2 项目/设备/自定义项后端 API + 按项目成员鉴权**（普通用户只见被分配的项目，admin 管全部并分配）
 - ⬜ **2.3 前端数据层切到 API**（localStorage 转离线缓存）+ 首登把本地数据迁移上云
-- ⬜ **2.4 自动同步（防抖 debounce）+ 同步状态指示器 + 后写为准（last-write-wins）+ 细粒度 PATCH**
-- ⬜ **2.5 admin 的项目成员分配 UI**
+- ✅ **2.4 自动同步（防抖 debounce）+ 同步状态指示器 + 后写为准（last-write-wins）+ 细粒度 PATCH**
+- ✅ **2.5 admin 的项目成员分配 UI**
 
-### 阶段三：操作日志 + 版本回滚（未开始）
-- 操作日志：记录**谁、何时、改了什么**；价格 / 公式改动要记录**改前改后**的值；用右侧抽屉展示
-- 版本快照（按项目）：
-  - 手动存档（带标签）
-  - 自动检查点（每约 20 次改动，或每天首次访问时）
-- 回滚：回滚前先自动存一份「回滚前」状态，可反悔
+### 阶段三：操作日志 + 版本回滚（已完成）
+- ✅ 操作日志：记录**谁、何时、改了什么**；价格 / 公式改动记**改前改后**；右侧抽屉展示（价格行映射 BOM 名称）
+- ✅ 版本快照（按项目）：手动存档（带标签）+ 自动检查点（每约 20 次同步 或 每日首访）
+- ✅ 回滚：回滚前先自动存一份「回滚前自动备份」，可反悔
+
+> **全部阶段已完成并通过 3 轮全面测试**（后端自动化 54 项 + 浏览器端到端 + 多用户/隔离/后写为准/数据正确性回归）。详见第 14 节。
 
 ---
 
@@ -301,3 +301,48 @@ npm run dev          # http://localhost:8788
 5. 首次上线后访问网址，后端会自动种入 admin/adminyy。
 
 > ⚠️ 坑：Git 自动部署时，`wrangler.toml` 里的 `database_id` 只对 CLI 生效；**Dashboard 的 D1 绑定才是 Pages 构建用的**，别忘了配，否则 `/api/*` 会报「数据库未绑定」。
+
+---
+
+## 14. 阶段 2.2–3 + 测试（全部已落地）
+
+### 14.1 数据模型（D1 表，见 `schema.sql`）
+`users` `sessions` `projects` `project_members` `equipment` `custom_items` `settings`（全局 params/prices/formulas/cparams）`logs` `snapshots`。
+- 项目/设备/自定义项**按项目隔离**；params/prices/formulas/cparams 为**全局共享**（沿用阶段一语义）。
+- 成员模型：普通用户只见 `project_members` 关联的项目，admin 见全部；创建者自动入组。
+
+### 14.2 完整 API（`functions/api/[[path]].js` 单路由）
+鉴权/用户见第 13 节。数据相关：
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | /api/bootstrap | 一次拉当前用户可见的 projects+equipment+custom+settings |
+| GET/POST | /api/projects | 列表（按成员过滤）/ 新建（接受客户端 id，创建者入组） |
+| GET/PATCH/DELETE | /api/projects/:id | 取/改/删（删级联设备/自定义/成员/快照） |
+| GET/POST | /api/projects/:id/members | 列成员 / 加成员（admin） |
+| DELETE | /api/projects/:id/members/:uid | 移除成员（admin） |
+| GET/POST | /api/projects/:id/equipment | 列 / 建设备 |
+| PATCH/DELETE | /api/equipment/:id | 改 / 删设备 |
+| GET/POST | /api/projects/:id/custom | 列 / 建自定义项 |
+| PATCH/DELETE | /api/custom/:id | 改 / 删自定义项 |
+| GET | /api/settings ; PUT /api/settings/:key | 读全部 / 写一类（params\|prices\|formulas\|cparams） |
+| GET | /api/logs?limit= | 操作日志（admin 全量；用户=自己项目+自身） |
+| GET/POST | /api/projects/:id/snapshots | 列 / 存快照 |
+| POST | /api/projects/:id/snapshots/:sid/rollback | 回滚（先自动备份当前态） |
+
+### 14.3 前端同步层（`index.html` 末尾「同步层」段）
+- `saveAll()` = `cacheToLocal()`（localStorage 离线缓存）+ `scheduleSync()`（防抖 700ms）。
+- `flushSync()`：`diffToCalls(serverSnapshot, snapshotNow())` 产出细粒度 POST/PATCH/DELETE + 变更的 settings PUT；成功后更新 `serverSnapshot`。
+- 登录后 `mountApp → bootstrapData()`：正常拉服务端覆盖内存；**服务端空或本地有未同步改动**则以本地为准推上去（首登迁移 / 断网恢复，后写为准）。
+- 客户端与服务端 **id 一致**（创建接口接受客户端 id），diff 才能按 id 精确比对。
+- 离线：缓存本地、置 `tf_unsynced`、显示「离线」、每 12s 重试。
+- 顶部 `.sync-ind` 显示：同步中 / 已保存 / 离线。
+- **坑**：回滚后必须 `serverSnapshot=null` 再 `bootstrapData()` 重置同步基准，否则旧 diff 会把已删数据重新创建。
+
+### 14.4 测试
+- 后端自动化：`python3 test/api_test.py`（需先重置本地 D1）。覆盖鉴权/用户/项目隔离/成员/设备/自定义/设置/bootstrap/日志/快照回滚/级联/401-403，共 54 项。
+- 重置本地 D1：对 9 张表 `DROP TABLE` 后 `npm run db:local`。
+- 数据正确性回归锚点：新项目默认设备（左右各 40m、双防区、1 套）经后端全链路仍复现 **标准件 ¥11,161.42 / 可选件 ¥1,984.26 / 合计 ¥13,145.69**。
+- 已完成 3 轮：① 后端 54 项全过；② 浏览器端到端（基准值/单双防区缩放/公式引擎/多设备汇总/自定义项/CSV/持久化）；③ 多用户隔离 + 后写为准 + 成员增删即时生效 + 普通用户受限视图 + 日志范围隔离。
+
+### 14.5 阶段一旧坑的现状
+- 「单价/公式按行索引存」的隐患仍在（`prices`/`formulas` 仍以 BOM 行索引为 key，存进全局 `settings`）。增删 `BOM` 项仍需迁移映射。
