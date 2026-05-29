@@ -286,15 +286,41 @@
     font-size:16px;color:var(--muted);padding:2px 8px;border-radius:4px;cursor:pointer;
     line-height:1}
   .project-card .menu-btn:hover{background:var(--soft);color:var(--brand)}
-  .project-card .menu-pop{position:absolute;top:36px;right:10px;background:#fff;
+  .menu-pop{position:absolute;top:36px;right:10px;background:#fff;
     border:1px solid var(--line);border-radius:6px;box-shadow:0 8px 20px rgba(0,0,0,.1);
     min-width:140px;z-index:5;padding:4px 0}
-  .project-card .menu-pop button{display:block;width:100%;text-align:left;border:none;
+  .menu-pop button{display:block;width:100%;text-align:left;border:none;
     background:transparent;padding:7px 14px;font-size:13px;cursor:pointer;color:var(--ink)}
-  .project-card .menu-pop button:hover{background:var(--soft);color:var(--brand)}
-  .project-card .menu-pop button.danger{color:var(--bad)}
-  .project-card .menu-pop button.danger:hover{background:#fee2e2}
-  .project-card .menu-pop hr{margin:4px 0;border:none;border-top:1px solid var(--line)}
+  .menu-pop button:hover{background:var(--soft);color:var(--brand)}
+  .menu-pop button.danger{color:var(--bad)}
+  .menu-pop button.danger:hover{background:#fee2e2}
+  .menu-pop hr{margin:4px 0;border:none;border-top:1px solid var(--line)}
+
+  /* 「+ 新建项目」卡片 */
+  .add-card{border:2px dashed var(--line);background:#fafbfd;border-radius:10px;min-height:200px;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted)}
+  .add-card:hover{border-color:var(--brand);color:var(--brand);background:var(--soft)}
+  .add-card .ac-inner{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:14px}
+  .add-card .plus{font-size:36px;line-height:1}
+  /* 列表视图 */
+  .projects-grid.list{display:flex;flex-direction:column;gap:8px}
+  .project-row{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:11px 16px;
+    display:flex;align-items:center;gap:14px;cursor:pointer;position:relative;transition:all .12s}
+  .project-row:hover{border-color:var(--brand);box-shadow:0 2px 10px rgba(37,99,235,.08)}
+  .project-row .pr-main{flex:1;min-width:0}
+  .project-row .pr-name{font-size:14px;font-weight:600;color:var(--brand-2)}
+  .project-row .pr-sub{font-size:11.5px;color:var(--muted);margin-top:2px;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .project-row .pr-stats{display:flex;gap:6px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+  .project-row .pr-stats .pill{background:var(--soft);color:var(--brand);padding:2px 8px;border-radius:4px;
+    font-size:11.5px;font-weight:500}
+  .project-row .pr-stats .pill.cost{background:#fee2e2;color:#b91c1c}
+  .project-row .menu-btn{position:static;border:none;background:transparent;font-size:16px;color:var(--muted);
+    padding:2px 8px;border-radius:4px;cursor:pointer}
+  .project-row .menu-btn:hover{background:var(--soft);color:var(--brand)}
+  .add-row-prj{background:#fafbfd;border:1.5px dashed var(--line);border-radius:8px;padding:12px;
+    text-align:center;color:var(--muted);cursor:pointer;font-size:13px}
+  .add-row-prj:hover{border-color:var(--brand);color:var(--brand);background:var(--soft)}
 
   .empty-state{grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--muted)}
   .empty-state h3{color:var(--brand-2);margin:0 0 8px;font-size:16px}
@@ -407,6 +433,10 @@
     <h2>📁 我的项目</h2>
     <span class="stat">共 <b id="prjCount">0</b> 个</span>
     <input id="prjSearch" class="search" placeholder="搜索项目名 / 客户...">
+    <span class="mode" id="prjViewSwitch" title="切换显示方式">
+      <button data-pv="card">▦ 卡片</button>
+      <button data-pv="list">☰ 列表</button>
+    </span>
     <button id="btnNewPrj" class="act primary">+ 新建项目</button>
     <button id="btnPrjExport" class="act">导出 CSV</button>
     <button id="btnUsers" class="act" style="display:none">👤 用户管理</button>
@@ -462,12 +492,6 @@
     <table class="users-table" id="usersTable"></table>
   </main>
 </div>
-
-<footer>
-  数据基于"双防区张力围栏 BOM 清单_30 线_V5"。<b>每台设备 = 你要卖出的一套设备</b>，左侧"设备列表"可任意添加/重命名/调整其防区与套数；
-  右侧 BOM 默认"全部设备汇总"显示真实总用量，切换到"单设备视图"可查看某一台设备的明细。
-  <br>BOM 任意行右侧 <code>ƒ</code> 按钮可编辑数量公式（变量含 <code>zoneLen1..N</code>、<code>totalZoneLen</code>、<code>sets</code> 及自定义参数）。
-</footer>
 
 <div id="toast" class="toast hidden"></div>
 
@@ -1326,6 +1350,24 @@ function equipCost(equip){
  *  渲染：项目列表（视图 1）
  * ========================================================= */
 let prjSearchTerm = "";
+let prjViewMode = lsGet("tf_prjViewMode", "card");   // "card" | "list"
+function projectRowHTML(p){
+  const stats = projectStats(p.id);
+  const created = new Date(p.createdAt||0);
+  const dateStr = `${created.getFullYear()}/${String(created.getMonth()+1).padStart(2,'0')}/${String(created.getDate()).padStart(2,'0')}`;
+  const sub = [ p.customer?esc(p.customer):"", "创建于 "+dateStr,
+    p.description?esc(p.description.slice(0,30)):"" ].filter(Boolean).join(" · ");
+  return `<div class="project-row" data-pid="${p.id}">
+    <div class="pr-main"><div class="pr-name">${esc(p.name)}</div><div class="pr-sub">${sub}</div></div>
+    <div class="pr-stats">
+      <span class="pill">${stats.equipCount} 设备</span>
+      <span class="pill">${stats.setsCount} 套</span>
+      <span class="pill">${round2(stats.totalLen)} m</span>
+      <span class="pill cost">¥${money(stats.cost)}</span>
+    </div>
+    <button class="menu-btn" data-pmenu="${p.id}" title="更多操作">⋮</button>
+  </div>`;
+}
 function projectCardHTML(p){
   const stats = projectStats(p.id);
   const es = equipmentList.filter(e=>e.projectId===p.id);
@@ -1363,30 +1405,30 @@ function projectCardHTML(p){
 function renderProjectsView(){
   document.getElementById("prjCount").textContent = projectList.length;
   const grid = document.getElementById("projectsGrid");
+  grid.className = "projects-grid" + (prjViewMode === "list" ? " list" : "");
+  document.querySelectorAll("#prjViewSwitch button").forEach(b=>b.classList.toggle("on", b.dataset.pv === prjViewMode));
+
   const term = prjSearchTerm.trim().toLowerCase();
   const visible = !term ? projectList : projectList.filter(p=>{
     return (p.name||"").toLowerCase().includes(term)
         || (p.customer||"").toLowerCase().includes(term)
         || (p.description||"").toLowerCase().includes(term);
   });
-  if(visible.length === 0){
-    if(projectList.length === 0){
-      grid.innerHTML = `<div class="empty-state">
-        <h3>还没有项目</h3>
-        <p>点击右上角 "+ 新建项目" 创建第一个项目</p>
-        <button id="emptyNewBtn">+ 立即创建</button>
-      </div>`;
-      const eb = document.getElementById("emptyNewBtn");
-      if(eb) eb.addEventListener("click", ()=>openNewProject());
-    }else{
-      grid.innerHTML = `<div class="empty-state"><h3>未找到匹配项目</h3><p>调整搜索关键词试试</p></div>`;
-    }
+  if(visible.length === 0 && term){
+    grid.innerHTML = `<div class="empty-state"><h3>未找到匹配项目</h3><p>调整搜索关键词试试</p></div>`;
     return;
   }
-  grid.innerHTML = visible.map(projectCardHTML).join("");
+  const itemHTML = prjViewMode === "list" ? projectRowHTML : projectCardHTML;
+  const addHTML = prjViewMode === "list"
+    ? `<div class="add-row-prj" id="addProjectCard">＋ 新建项目</div>`
+    : `<div class="add-card" id="addProjectCard"><div class="ac-inner"><span class="plus">＋</span><span>新建项目</span></div></div>`;
+  grid.innerHTML = visible.map(itemHTML).join("") + addHTML;
 
-  /* 绑定卡片点击 -> 进入项目 */
-  grid.querySelectorAll(".project-card").forEach(card=>{
+  const addEl = document.getElementById("addProjectCard");
+  if(addEl) addEl.addEventListener("click", ()=>openNewProject());
+
+  /* 绑定卡片/行点击 -> 进入项目 */
+  grid.querySelectorAll("[data-pid]").forEach(card=>{
     const pid = card.dataset.pid;
     card.addEventListener("click", e=>{
       if(e.target.closest(".menu-btn") || e.target.closest(".menu-pop")) return;
@@ -2127,6 +2169,13 @@ document.querySelectorAll("#modeSwitch button").forEach(b=>{
 /* ===== 项目视图相关按钮绑定 ===== */
 document.getElementById("btnBack").addEventListener("click", backToProjects);
 document.getElementById("btnNewPrj").addEventListener("click", openNewProject);
+document.querySelectorAll("#prjViewSwitch button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    prjViewMode = b.dataset.pv;
+    lsSet("tf_prjViewMode", prjViewMode);
+    renderProjectsView();
+  });
+});
 document.getElementById("hdrPrjName").addEventListener("click", ()=>{
   openProjectEditor(activeProjectId, false);
 });
