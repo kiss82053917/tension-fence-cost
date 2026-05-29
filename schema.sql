@@ -80,3 +80,31 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE INDEX IF NOT EXISTS idx_members_user    ON project_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_equipment_proj  ON equipment(project_id);
 CREATE INDEX IF NOT EXISTS idx_custom_proj      ON custom_items(project_id);
+
+-- ----- 阶段三：操作日志 + 版本快照 -----
+-- 操作日志：谁、何时、改了什么（价格/公式记改前改后）
+CREATE TABLE IF NOT EXISTS logs (
+  id         TEXT PRIMARY KEY,
+  ts         INTEGER NOT NULL,
+  user_id    TEXT,
+  username   TEXT,
+  action     TEXT NOT NULL,        -- 短动作文案，如「新建项目」「改单价」
+  detail     TEXT,                 -- JSON：{text} 或 {row,before,after} 等
+  project_id TEXT,                 -- 关联项目（全局设置类为空）
+  target     TEXT                  -- 目标名（项目名/用户名/设备名等）
+);
+CREATE INDEX IF NOT EXISTS idx_logs_ts      ON logs(ts);
+CREATE INDEX IF NOT EXISTS idx_logs_project ON logs(project_id);
+
+-- 项目版本快照（手动存档 / 自动检查点 / 回滚前自动备份）
+CREATE TABLE IF NOT EXISTS snapshots (
+  id         TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  label      TEXT NOT NULL,
+  kind       TEXT NOT NULL DEFAULT 'manual',  -- manual | auto | prerollback
+  created_at INTEGER NOT NULL,
+  created_by TEXT,
+  username   TEXT,
+  data       TEXT NOT NULL          -- JSON：{project:{...}, equipment:[...], custom:[...]}
+);
+CREATE INDEX IF NOT EXISTS idx_snap_project ON snapshots(project_id);

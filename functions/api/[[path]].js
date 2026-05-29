@@ -121,6 +121,31 @@ async function ownerProjectId(db, table, id) {
   return r ? r.project_id : null;
 }
 
+/* ---------- 操作日志 ---------- */
+async function logIt(db, me, action, opts = {}) {
+  try {
+    await db.prepare("INSERT INTO logs (id, ts, user_id, username, action, detail, project_id, target) VALUES (?,?,?,?,?,?,?,?)")
+      .bind(crypto.randomUUID(), Date.now(), me ? me.id : null, me ? me.username : null,
+            action, opts.detail ? JSON.stringify(opts.detail) : null,
+            opts.projectId || null, opts.target || null).run();
+  } catch (e) { /* 日志失败不影响主流程 */ }
+}
+
+/* ---------- 项目快照：抓取当前项目的全部数据 ---------- */
+async function captureProject(db, pid) {
+  const project = await db.prepare("SELECT id, name, customer, description FROM projects WHERE id = ?").bind(pid).first();
+  const equipment = (await db.prepare("SELECT id, name, sets, mode, zones, pos FROM equipment WHERE project_id = ? ORDER BY pos ASC").bind(pid).all()).results;
+  const custom = (await db.prepare("SELECT id, sec, name, spec, unit, qty, qty_formula, price, note, pos FROM custom_items WHERE project_id = ? ORDER BY pos ASC").bind(pid).all()).results;
+  return { project, equipment, custom };
+}
+async function makeSnapshot(db, me, pid, label, kind) {
+  const data = await captureProject(db, pid);
+  const id = crypto.randomUUID();
+  await db.prepare("INSERT INTO snapshots (id, project_id, label, kind, created_at, created_by, username, data) VALUES (?,?,?,?,?,?,?,?)")
+    .bind(id, pid, label, kind || "manual", Date.now(), me ? me.id : null, me ? me.username : null, JSON.stringify(data)).run();
+  return id;
+}
+
 /* =========================================================
  *  入口
  * ========================================================= */
@@ -193,6 +218,7 @@ export async function onRequest(context) {
       const pwd = await hashPassword(password.trim());
       await db.prepare("INSERT INTO users (id, username, pwd, role, created_at) VALUES (?,?,?,?,?)")
         .bind(id, username, pwd, role, Date.now()).run();
+      await logIt(db, me, "新建用户", { target: username });
       return json({ user: { id, username, role } });
     }
 
@@ -212,6 +238,7 @@ export async function onRequest(context) {
         // 注销该用户的其他会话（保留当前管理员会话）
         const curToken = getCookie(request, "tf_sid") || "";
         await db.prepare("DELETE FROM sessions WHERE user_id = ? AND token <> ?").bind(id, curToken).run();
+        await logIt(db, me, "重置密码", { target: target.username });
         return json({ ok: true });
       }
       // 编辑
@@ -227,6 +254,7 @@ export async function onRequest(context) {
           if (dup) return bad("用户名已存在");
         }
         await db.prepare("UPDATE users SET username = ?, role = ? WHERE id = ?").bind(newName, newRole, id).run();
+        await logIt(db, me, "编辑用户", { target: newName });
         return json({ user: { id, username: newName, role: newRole } });
       }
       // 删除
@@ -234,6 +262,7 @@ export async function onRequest(context) {
         if (isSuper) return bad("超级管理员不可删除", 403);
         if (id === me.id) return bad("不能删除当前登录账号", 403);
         await db.prepare("DELETE FROM users WHERE id = ?").bind(id).run();
+        await logIt(db, me, "删除用户", { target: target.username });
         return json({ ok: true });
       }
     }
@@ -258,6 +287,22 @@ export async function onRequest(context) {
     return json({ projects, equipment, custom, settings });
   }
 
+  /* ---- 操作日志 ---- */
+  if (segs[0] === "logs" && method === "GET") {
+    const limit = Math.min(500, +(new URL(request.url).searchParams.get("limit")) || 200);
+    let rows;
+    if (me.role === "admin") {
+      rows = (await db.prepare("SELECT * FROM logs ORDER BY ts DESC LIMIT ?").bind(limit).all()).results;
+    } else {
+      rows = (await db.prepare(
+        "SELECT l.* FROM logs l WHERE l.user_id = ? OR l.project_id IN " +
+        "(SELECT project_id FROM project_members WHERE user_id = ?) ORDER BY l.ts DESC LIMIT ?")
+        .bind(me.id, me.id, limit).all()).results;
+    }
+    rows.forEach(r => { if (r.detail) { try { r.detail = JSON.parse(r.detail); } catch (e) {} } });
+    return json({ logs: rows });
+  }
+
   /* ---- 全局共享设置（任何登录用户可读写，后写为准） ---- */
   if (segs[0] === "settings") {
     if (segs.length === 1 && method === "GET") {
@@ -270,10 +315,27 @@ export async function onRequest(context) {
       const key = segs[1];
       if (!["params", "prices", "formulas", "cparams"].includes(key)) return bad("未知设置键");
       const value = await readJson(request);           // 请求体即为要保存的值（对象或数组）
+      const oldRow = await db.prepare("SELECT v FROM settings WHERE k = ?").bind(key).first();
+      let oldVal; try { oldVal = oldRow ? JSON.parse(oldRow.v) : undefined; } catch (e) { oldVal = undefined; }
       await db.prepare(
         "INSERT INTO settings (k, v, updated_at) VALUES (?,?,?) " +
         "ON CONFLICT(k) DO UPDATE SET v = excluded.v, updated_at = excluded.updated_at")
         .bind(key, JSON.stringify(value), Date.now()).run();
+      // 改前改后日志
+      if (key === "prices" || key === "formulas") {
+        const action = key === "prices" ? "改单价" : "改公式";
+        const ov = oldVal || {}, nv = value || {};
+        for (const rk of new Set([...Object.keys(ov), ...Object.keys(nv)])) {
+          if (JSON.stringify(ov[rk]) !== JSON.stringify(nv[rk]))
+            await logIt(db, me, action, { detail: { row: +rk, before: ov[rk] === undefined ? null : ov[rk], after: nv[rk] === undefined ? null : nv[rk] } });
+        }
+      } else if (key === "params" && oldVal) {   // 仅对已有键的真实改动记日志（避免首次填充刷屏）
+        const nv = value || {};
+        for (const pk of Object.keys(oldVal)) {
+          if (JSON.stringify(oldVal[pk]) !== JSON.stringify(nv[pk]))
+            await logIt(db, me, "改参数", { detail: { param: pk, before: oldVal[pk], after: nv[pk] === undefined ? null : nv[pk] } });
+        }
+      }
       return json({ ok: true });
     }
   }
@@ -300,6 +362,7 @@ export async function onRequest(context) {
         .bind(id, name, (body.customer || "").trim(), (body.description || "").trim(), me.id, now, now).run();
       await db.prepare("INSERT INTO project_members (project_id, user_id, added_at) VALUES (?,?,?)")
         .bind(id, me.id, now).run();
+      await logIt(db, me, "新建项目", { projectId: id, target: name });
       return json({ project: { id, name, customer: (body.customer || "").trim(), description: (body.description || "").trim(), created_at: now, updated_at: now } });
     }
 
@@ -322,17 +385,61 @@ export async function onRequest(context) {
           if (me.role !== "admin") return bad("需要管理员权限", 403);
           const body = await readJson(request);
           const userId = body.userId || "";
-          const u = await db.prepare("SELECT id FROM users WHERE id = ?").bind(userId).first();
+          const u = await db.prepare("SELECT id, username FROM users WHERE id = ?").bind(userId).first();
           if (!u) return bad("用户不存在", 404);
           await db.prepare("INSERT OR IGNORE INTO project_members (project_id, user_id, added_at) VALUES (?,?,?)")
             .bind(pid, userId, Date.now()).run();
+          await logIt(db, me, "添加成员", { projectId: pid, target: u.username });
           return json({ ok: true });
         }
         // 移除成员（仅 admin）
         if (segs.length === 4 && method === "DELETE") {
           if (me.role !== "admin") return bad("需要管理员权限", 403);
+          const rmU = await db.prepare("SELECT username FROM users WHERE id = ?").bind(segs[3]).first();
           await db.prepare("DELETE FROM project_members WHERE project_id = ? AND user_id = ?")
             .bind(pid, segs[3]).run();
+          await logIt(db, me, "移除成员", { projectId: pid, target: rmU ? rmU.username : segs[3] });
+          return json({ ok: true });
+        }
+      }
+
+      /* 项目版本快照 / 回滚 */
+      if (segs[2] === "snapshots") {
+        if (segs.length === 3 && method === "GET") {
+          const { results } = await db.prepare(
+            "SELECT id, label, kind, created_at, username FROM snapshots WHERE project_id = ? ORDER BY created_at DESC")
+            .bind(pid).all();
+          return json({ snapshots: results });
+        }
+        if (segs.length === 3 && method === "POST") {
+          const body = await readJson(request);
+          const label = (body.label || "存档").trim() || "存档";
+          const id = await makeSnapshot(db, me, pid, label, body.kind === "auto" ? "auto" : "manual");
+          await logIt(db, me, "保存版本", { projectId: pid, target: label });
+          return json({ id });
+        }
+        if (segs.length === 5 && segs[4] === "rollback" && method === "POST") {
+          const snap = await db.prepare("SELECT * FROM snapshots WHERE id = ? AND project_id = ?").bind(segs[3], pid).first();
+          if (!snap) return bad("快照不存在", 404);
+          let data; try { data = JSON.parse(snap.data); } catch (e) { return bad("快照数据损坏", 500); }
+          // 回滚前先自动存一份当前状态，可反悔
+          await makeSnapshot(db, me, pid, "回滚前自动备份", "prerollback");
+          const now = Date.now();
+          const stmts = [
+            db.prepare("DELETE FROM equipment WHERE project_id = ?").bind(pid),
+            db.prepare("DELETE FROM custom_items WHERE project_id = ?").bind(pid),
+          ];
+          (data.equipment || []).forEach(e => stmts.push(
+            db.prepare("INSERT INTO equipment (id, project_id, name, sets, mode, zones, pos, updated_at) VALUES (?,?,?,?,?,?,?,?)")
+              .bind(e.id, pid, e.name, e.sets, e.mode, typeof e.zones === "string" ? e.zones : JSON.stringify(e.zones || []), e.pos || 0, now)));
+          (data.custom || []).forEach(c => stmts.push(
+            db.prepare("INSERT INTO custom_items (id, project_id, sec, name, spec, unit, qty, qty_formula, price, note, pos, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+              .bind(c.id, pid, c.sec, c.name, c.spec, c.unit, c.qty, c.qty_formula || null, c.price, c.note, c.pos || 0, now)));
+          if (data.project) stmts.push(
+            db.prepare("UPDATE projects SET name=?, customer=?, description=?, updated_at=? WHERE id=?")
+              .bind(data.project.name, data.project.customer || "", data.project.description || "", now, pid));
+          await db.batch(stmts);
+          await logIt(db, me, "回滚版本", { projectId: pid, target: snap.label });
           return json({ ok: true });
         }
       }
@@ -354,6 +461,7 @@ export async function onRequest(context) {
             .bind(id, pid, (body.name || "设备"), (+body.sets || 1),
                   body.mode === "single" ? "single" : "double", JSON.stringify(zones),
                   (+body.pos || 0), now).run();
+          await logIt(db, me, "新增设备", { projectId: pid, target: body.name || "设备" });
           return json({ equipment: { id, project_id: pid, name: body.name || "设备", sets: +body.sets || 1, mode: body.mode === "single" ? "single" : "double", zones, pos: +body.pos || 0, updated_at: now } });
         }
       }
@@ -372,6 +480,7 @@ export async function onRequest(context) {
           await db.prepare("INSERT INTO custom_items (id, project_id, sec, name, spec, unit, qty, qty_formula, price, note, pos, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
             .bind(id, pid, body.sec || "其他自定义", body.name || "", body.spec || "", body.unit || "个",
                   +body.qty || 0, body.qtyFormula || null, +body.price || 0, body.note || "", +body.pos || 0, now).run();
+          await logIt(db, me, "新增自定义项", { projectId: pid, target: body.name || "" });
           return json({ custom: { id, project_id: pid } });
         }
       }
@@ -387,16 +496,20 @@ export async function onRequest(context) {
         if (!name) return bad("项目名称不能为空");
         await db.prepare("UPDATE projects SET name = ?, customer = ?, description = ?, updated_at = ? WHERE id = ?")
           .bind(name, (body.customer || "").trim(), (body.description || "").trim(), Date.now(), pid).run();
+        await logIt(db, me, "编辑项目", { projectId: pid, target: name });
         return json({ ok: true });
       }
       if (segs.length === 2 && method === "DELETE") {
+        const delP = await db.prepare("SELECT name FROM projects WHERE id = ?").bind(pid).first();
         // 手动级联删除（不依赖 D1 外键）
         await db.batch([
           db.prepare("DELETE FROM equipment WHERE project_id = ?").bind(pid),
           db.prepare("DELETE FROM custom_items WHERE project_id = ?").bind(pid),
           db.prepare("DELETE FROM project_members WHERE project_id = ?").bind(pid),
+          db.prepare("DELETE FROM snapshots WHERE project_id = ?").bind(pid),
           db.prepare("DELETE FROM projects WHERE id = ?").bind(pid),
         ]);
+        await logIt(db, me, "删除项目", { projectId: pid, target: delP ? delP.name : pid });
         return json({ ok: true });
       }
     }
@@ -418,10 +531,13 @@ export async function onRequest(context) {
       const pos = body.pos !== undefined ? (+body.pos || 0) : cur.pos;
       await db.prepare("UPDATE equipment SET name = ?, sets = ?, mode = ?, zones = ?, pos = ?, updated_at = ? WHERE id = ?")
         .bind(name, sets, mode, zones, pos, Date.now(), eid).run();
+      await logIt(db, me, "修改设备", { projectId: projId, target: name });
       return json({ ok: true });
     }
     if (segs.length === 2 && method === "DELETE") {
+      const delE = await db.prepare("SELECT name FROM equipment WHERE id = ?").bind(eid).first();
       await db.prepare("DELETE FROM equipment WHERE id = ?").bind(eid).run();
+      await logIt(db, me, "删除设备", { projectId: projId, target: delE ? delE.name : eid });
       return json({ ok: true });
     }
   }
@@ -443,10 +559,13 @@ export async function onRequest(context) {
               body.price !== undefined ? (+body.price || 0) : cur.price,
               f("note", cur.note), body.pos !== undefined ? (+body.pos || 0) : cur.pos,
               Date.now(), cid).run();
+      await logIt(db, me, "修改自定义项", { projectId: projId, target: f("name", cur.name) });
       return json({ ok: true });
     }
     if (segs.length === 2 && method === "DELETE") {
+      const delC = await db.prepare("SELECT name FROM custom_items WHERE id = ?").bind(cid).first();
       await db.prepare("DELETE FROM custom_items WHERE id = ?").bind(cid).run();
+      await logIt(db, me, "删除自定义项", { projectId: projId, target: delC ? delC.name : cid });
       return json({ ok: true });
     }
   }

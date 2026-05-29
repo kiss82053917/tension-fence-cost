@@ -333,6 +333,27 @@
   .mem-list{border:1px solid var(--line);border-radius:6px;max-height:240px;overflow:auto}
   .mem-row{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid #f0f2f7}
   .mem-row:last-child{border-bottom:none}
+
+  /* 操作日志抽屉 */
+  .drawer{position:fixed;top:0;right:0;height:100vh;width:420px;max-width:92vw;background:#fff;
+    box-shadow:-8px 0 30px rgba(0,0,0,.18);z-index:120;display:flex;flex-direction:column;
+    transform:translateX(0);transition:transform .2s}
+  .drawer.hidden{transform:translateX(105%)}
+  .drawer-head{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+  .drawer-head h3{margin:0;font-size:15px;color:var(--brand-2);flex:1}
+  .drawer-body{flex:1;overflow:auto;padding:8px 0}
+  .log-row{padding:8px 16px;border-bottom:1px solid #f2f4f8;font-size:12.5px;display:flex;gap:8px}
+  .log-row .lt{color:var(--muted);font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .log-row .lmain{flex:1;min-width:0}
+  .log-row .la{font-weight:600;color:var(--ink)}
+  .log-row .lu{color:var(--brand-2)}
+  .log-row .ld{color:var(--muted);margin-top:2px;word-break:break-all}
+  .log-row .ld .ba{color:var(--bad)} .log-row .ld .aft{color:var(--ok)}
+  .snap-row{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #f0f2f7}
+  .snap-row:last-child{border-bottom:none}
+  .snap-row .si{flex:1;min-width:0}
+  .snap-row .sk{font-size:10px;padding:1px 6px;border-radius:8px;background:var(--soft);color:var(--brand)}
+  .snap-row .sk.auto{background:#fef3c7;color:var(--warn)} .snap-row .sk.prerollback{background:#e0e7ff;color:#4338ca}
 </style>
 </head>
 <body>
@@ -392,6 +413,8 @@
     <span class="spacer"></span>
     <span class="sync-ind" title="同步状态"></span>
     <button id="btnExport" class="act primary">导出 CSV</button>
+    <button id="btnVersions" class="act">🕐 版本</button>
+    <button id="btnLogs" class="act">📋 日志</button>
     <button id="btnPrint"  class="act">打印</button>
     <button id="btnReset"  class="act">重置当前项目</button>
     <button id="btnLogout2" class="act">退出</button>
@@ -499,6 +522,38 @@
       <span style="flex:1"></span>
       <button id="memberModalDone" class="primary">完成</button>
     </div>
+  </div>
+</div>
+
+<!-- 操作日志抽屉 -->
+<div id="logDrawer" class="drawer hidden">
+  <div class="drawer-head">
+    <h3>📋 操作日志</h3>
+    <button id="logRefresh" class="act" title="刷新">↻</button>
+    <button class="x-btn" id="logClose">×</button>
+  </div>
+  <div class="drawer-body" id="logBody">加载中…</div>
+</div>
+
+<!-- 版本快照 / 回滚 -->
+<div id="snapModal" class="modal hidden">
+  <div class="modal-card" style="max-width:520px">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">🕐 版本快照</div>
+        <div class="modal-sub" id="snapSub">为当前项目存档；回滚前会自动备份，可反悔</div>
+      </div>
+      <button class="x-btn" id="snapClose">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <input id="snapLabel" type="text" placeholder="存档标签，如「报价 V1」" maxlength="40"
+          style="flex:1;padding:6px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px">
+        <button id="snapSave" class="act primary">＋ 存为版本</button>
+      </div>
+      <div id="snapList">加载中…</div>
+    </div>
+    <div class="fx-actions"><span style="flex:1"></span><button id="snapDone" class="primary">完成</button></div>
   </div>
 </div>
 
@@ -2325,6 +2380,101 @@ document.getElementById("memberModalDone").addEventListener("click", closeMember
 document.getElementById("memberModal").addEventListener("click", e=>{ if(e.target.id==="memberModal") closeMemberModal(); });
 
 /* =========================================================
+ *  操作日志 + 版本快照 / 回滚（阶段三）
+ * ========================================================= */
+function fmtLogTime(ts){ const d=new Date(ts), p=n=>String(n).padStart(2,"0");
+  return `${d.getMonth()+1}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+function logDetailHTML(l){
+  const d = l.detail || {};
+  if(l.action==="改单价"||l.action==="改公式"){
+    const nm = BOM[d.row] ? BOM[d.row].name : ("第"+d.row+"项");
+    const b = d.before==null?"默认":d.before, a = d.after==null?"默认":d.after;
+    return `${esc(nm)}：<span class="ba">${esc(String(b))}</span> → <span class="aft">${esc(String(a))}</span>`;
+  }
+  if(l.action==="改参数") return `${esc(d.param||"")}：<span class="ba">${esc(String(d.before))}</span> → <span class="aft">${esc(String(d.after))}</span>`;
+  return d.text ? esc(d.text) : "";
+}
+function openLogDrawer(){ document.getElementById("logDrawer").classList.remove("hidden"); renderLogs(); }
+function closeLogDrawer(){ document.getElementById("logDrawer").classList.add("hidden"); }
+async function renderLogs(){
+  const box = document.getElementById("logBody"); box.innerHTML = "加载中…";
+  let logs=[];
+  try{ logs = (await api("logs?limit=200")).logs || []; }
+  catch(e){ box.innerHTML = `<div style="padding:16px;color:var(--bad)">加载失败：${esc(e.message)}</div>`; return; }
+  if(!logs.length){ box.innerHTML = `<div style="padding:16px;color:var(--muted)">暂无日志</div>`; return; }
+  const prjName = id => { const p=projectList.find(x=>x.id===id); return p?p.name:"项目"; };
+  box.innerHTML = logs.map(l=>{
+    const det = logDetailHTML(l);
+    const tgt = l.target ? ` <span class="lu">${esc(l.target)}</span>` : "";
+    const prj = l.project_id ? ` · ${esc(prjName(l.project_id))}` : "";
+    return `<div class="log-row"><span class="lt">${fmtLogTime(l.ts)}</span>
+      <span class="lmain"><span class="la">${esc(l.action)}</span>${tgt}
+        <span class="lt">${prj} · ${esc(l.username||"")}</span>${det?`<div class="ld">${det}</div>`:""}</span></div>`;
+  }).join("");
+}
+
+function openSnapModal(){
+  if(!activeProject()){ alert("请先进入一个项目。"); return; }
+  document.getElementById("snapSub").textContent = "项目：" + activeProject().name + " · 回滚前会自动备份，可反悔";
+  document.getElementById("snapLabel").value = "";
+  document.getElementById("snapModal").classList.remove("hidden");
+  renderSnaps();
+}
+function closeSnapModal(){ document.getElementById("snapModal").classList.add("hidden"); }
+async function renderSnaps(){
+  const box = document.getElementById("snapList"); box.innerHTML = "加载中…";
+  const pid = activeProjectId;
+  let snaps=[];
+  try{ snaps = (await api(`projects/${pid}/snapshots`)).snapshots || []; }
+  catch(e){ box.innerHTML = `<div style="color:var(--bad)">加载失败：${esc(e.message)}</div>`; return; }
+  if(!snaps.length){ box.innerHTML = `<div style="color:var(--muted);padding:8px">暂无版本，先存一个吧</div>`; return; }
+  const kl = k => k==="auto"?"自动":(k==="prerollback"?"回滚前":"手动");
+  box.innerHTML = snaps.map(s=>`<div class="snap-row">
+    <div class="si"><b>${esc(s.label)}</b> <span class="sk ${s.kind}">${kl(s.kind)}</span>
+      <div class="lt">${fmtLogTime(s.created_at)} · ${esc(s.username||"")}</div></div>
+    <button class="u-op" data-roll="${escAttr(s.id)}" data-label="${escAttr(s.label)}">回滚到此</button></div>`).join("");
+  box.querySelectorAll("button[data-roll]").forEach(b=>b.addEventListener("click", ()=>doRollback(b.dataset.roll, b.dataset.label)));
+}
+async function doSnapshot(){
+  const pid = activeProjectId;
+  const label = document.getElementById("snapLabel").value.trim() || "存档";
+  try{ await flushSync(); await api(`projects/${pid}/snapshots`, {method:"POST", body:{label}});
+    document.getElementById("snapLabel").value = ""; renderSnaps(); }
+  catch(e){ alert("存档失败：" + e.message); }
+}
+async function doRollback(sid, label){
+  if(!confirm(`回滚到版本「${label}」？\n当前状态会先自动备份，可再回滚回来。`)) return;
+  const pid = activeProjectId;
+  try{
+    await flushSync();                       // 先落库当前改动（会被「回滚前」备份捕获）
+    await api(`projects/${pid}/snapshots/${sid}/rollback`, {method:"POST"});
+    lsSet("tf_unsynced", false); serverSnapshot = null;   // 强制走正常覆盖
+    await bootstrapData(); fixActiveRefs(); renderCurrentView(); closeSnapModal();
+    alert("已回滚（原状态已自动备份为「回滚前自动备份」）。");
+  }catch(e){ alert("回滚失败：" + e.message); }
+}
+/* 自动检查点：每约 20 次同步 或 每日首访 存一次 */
+let changeCounter = +(lsGet("tf_changeCount", 0)) || 0;
+async function autoCheckpointMaybe(){
+  const pid = activeProjectId;
+  if(!currentUser || !pid || !projectList.some(p=>p.id===pid)) return;
+  changeCounter++; lsSet("tf_changeCount", changeCounter);
+  const today = new Date().toISOString().slice(0,10);
+  let due = false;
+  if(changeCounter >= 20){ due = true; changeCounter = 0; lsSet("tf_changeCount", 0); }
+  if(lsGet("tf_autoSnapDay","") !== today){ due = true; lsSet("tf_autoSnapDay", today); }
+  if(due){ try{ await api(`projects/${pid}/snapshots`, {method:"POST", body:{label:"自动检查点", kind:"auto"}}); }catch(e){} }
+}
+document.getElementById("btnLogs").addEventListener("click", openLogDrawer);
+document.getElementById("logClose").addEventListener("click", closeLogDrawer);
+document.getElementById("logRefresh").addEventListener("click", renderLogs);
+document.getElementById("btnVersions").addEventListener("click", openSnapModal);
+document.getElementById("snapClose").addEventListener("click", closeSnapModal);
+document.getElementById("snapDone").addEventListener("click", closeSnapModal);
+document.getElementById("snapSave").addEventListener("click", doSnapshot);
+document.getElementById("snapModal").addEventListener("click", e=>{ if(e.target.id==="snapModal") closeSnapModal(); });
+
+/* =========================================================
  *  同步层（阶段 2.3 / 2.4）
  *  - bootstrapData：登录后从后端拉全量；服务端空+本地有数据则首登迁移
  *  - saveAll() = cacheToLocal() + scheduleSync()（防抖）
@@ -2473,6 +2623,7 @@ async function flushSync(){
     for(const c of calls){ await api(c.path, {method:c.method, body:c.body}); }
     serverSnapshot = cur; lsSet("tf_unsynced", false);
     setSyncState("saved"); cacheToLocal();
+    autoCheckpointMaybe();
   }catch(e){
     lsSet("tf_unsynced", true); setSyncState("offline"); startRetry();
   }finally{ syncBusy = false; }
