@@ -219,37 +219,161 @@
     .add-row,.del-btn,.fx-btn{display:none}
     td .price-in{border:none;background:transparent;padding:0}
   }
+
+  /* ===== 项目列表视图 ===== */
+  .view.hidden{display:none}
+  .projects-header{display:flex;align-items:center;gap:12px;padding:12px 20px;
+    background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10;flex-wrap:wrap}
+  .projects-header h2{margin:0;font-size:17px;color:var(--brand-2)}
+  .projects-header .search{flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--line);
+    border-radius:6px;font-size:13px;background:#fff}
+  .projects-header .search:focus{outline:none;border-color:var(--brand)}
+  .projects-header .stat{display:inline-flex;align-items:baseline;gap:6px;padding:4px 10px;
+    background:var(--soft);border-radius:6px}
+  .projects-header .stat b{color:var(--brand-2);font-size:14px}
+  .projects-page{padding:20px}
+  .projects-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(340px, 1fr));gap:14px}
+  .project-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:14px 16px;cursor:pointer;transition:all .15s;position:relative;display:flex;
+    flex-direction:column;min-height:200px}
+  .project-card:hover{border-color:var(--brand);box-shadow:0 6px 18px rgba(37,99,235,.12);
+    transform:translateY(-1px)}
+  .project-card h3{margin:0 0 4px;font-size:15px;color:var(--brand-2);
+    padding-right:30px;line-height:1.3}
+  .project-card .meta{color:var(--muted);font-size:11.5px;margin-bottom:8px;
+    display:flex;flex-wrap:wrap;gap:8px}
+  .project-card .meta .b{color:var(--ink)}
+  .project-card .stats{display:flex;gap:6px;flex-wrap:wrap;padding:8px 0;
+    border-top:1px solid #eef0f5;border-bottom:1px solid #eef0f5;
+    font-variant-numeric:tabular-nums}
+  .project-card .stats .pill{background:var(--soft);color:var(--brand);
+    padding:2px 8px;border-radius:4px;font-size:11.5px;font-weight:500}
+  .project-card .stats .pill.cost{background:#fee2e2;color:#b91c1c}
+  .project-card .stats .pill.empty{background:#f3f4f6;color:var(--muted)}
+  .project-card .equip-list{margin-top:8px;overflow:auto;flex:1;max-height:200px}
+  .project-card .equip-mini{display:flex;justify-content:space-between;align-items:center;
+    padding:4px 0;font-size:12px;border-bottom:1px solid #f5f6f9;gap:8px}
+  .project-card .equip-mini:last-child{border:none}
+  .project-card .equip-mini .nm{color:var(--ink);overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;flex:1}
+  .project-card .equip-mini .info{color:var(--muted);font-size:11px;
+    font-variant-numeric:tabular-nums;white-space:nowrap}
+  .project-card .equip-empty{color:var(--muted);font-size:12px;padding:12px 0;text-align:center}
+  .project-card .menu-btn{position:absolute;top:10px;right:10px;border:none;background:transparent;
+    font-size:16px;color:var(--muted);padding:2px 8px;border-radius:4px;cursor:pointer;
+    line-height:1}
+  .project-card .menu-btn:hover{background:var(--soft);color:var(--brand)}
+  .project-card .menu-pop{position:absolute;top:36px;right:10px;background:#fff;
+    border:1px solid var(--line);border-radius:6px;box-shadow:0 8px 20px rgba(0,0,0,.1);
+    min-width:140px;z-index:5;padding:4px 0}
+  .project-card .menu-pop button{display:block;width:100%;text-align:left;border:none;
+    background:transparent;padding:7px 14px;font-size:13px;cursor:pointer;color:var(--ink)}
+  .project-card .menu-pop button:hover{background:var(--soft);color:var(--brand)}
+  .project-card .menu-pop button.danger{color:var(--bad)}
+  .project-card .menu-pop button.danger:hover{background:#fee2e2}
+  .project-card .menu-pop hr{margin:4px 0;border:none;border-top:1px solid var(--line)}
+
+  .empty-state{grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--muted)}
+  .empty-state h3{color:var(--brand-2);margin:0 0 8px;font-size:16px}
+  .empty-state button{margin-top:12px;padding:8px 18px;background:var(--brand);color:#fff;
+    border:none;border-radius:6px;cursor:pointer;font-size:13px}
+  .empty-state button:hover{background:var(--brand-2)}
+
+  /* 返回按钮 */
+  .btn-back{padding:5px 12px;border:1px solid var(--line);background:#fff;border-radius:6px;
+    cursor:pointer;font-size:13px;color:var(--brand)}
+  .btn-back:hover{background:var(--soft);border-color:var(--brand)}
+  header .prj-name{font-size:15px;font-weight:600;color:var(--brand-2);
+    padding:3px 8px;border-radius:5px;cursor:pointer;border:1px solid transparent}
+  header .prj-name:hover{background:var(--soft);border-color:var(--line)}
+
+  /* 项目信息编辑表单（共用 .modal） */
+  .form-row{display:grid;grid-template-columns:80px 1fr;gap:10px;align-items:center;margin:8px 0}
+  .form-row label{color:var(--muted);font-size:12px}
+  .form-row input,.form-row textarea{padding:6px 10px;border:1px solid var(--line);
+    border-radius:6px;font-size:13px;width:100%;font-family:inherit}
+  .form-row input:focus,.form-row textarea:focus{outline:none;border-color:var(--brand)}
+  .form-row textarea{min-height:60px;resize:vertical}
 </style>
 </head>
 <body>
 
-<header>
-  <h1>张力围栏 · 多设备成本工具</h1>
-  <span class="stat">设备数 <b id="kEquipCount">—</b></span>
-  <span class="stat">总套数 <b id="kSetsAll">—</b></span>
-  <span class="stat">围栏总长 <b id="kTotalLen">—</b> m</span>
-  <span class="stat">主螺旋柱 <b id="kMainPoles">—</b> 根</span>
-  <span class="stat grand">总价 ¥<b id="kGrand">—</b></span>
-  <span class="mode" id="modeSwitch">
-    <button data-mode="aggregate">📊 全部设备汇总</button>
-    <button data-mode="single">🔍 单设备视图</button>
-  </span>
-  <span class="spacer"></span>
-  <button id="btnExport" class="act primary">导出 CSV</button>
-  <button id="btnPrint"  class="act">打印</button>
-  <button id="btnReset"  class="act">重置</button>
-</header>
+<!-- ===== 视图 1：项目列表 ===== -->
+<div id="viewProjects" class="view">
+  <header class="projects-header">
+    <h2>📁 我的项目</h2>
+    <span class="stat">共 <b id="prjCount">0</b> 个</span>
+    <input id="prjSearch" class="search" placeholder="搜索项目名 / 客户...">
+    <button id="btnNewPrj" class="act primary">+ 新建项目</button>
+    <button id="btnPrjExport" class="act">导出 CSV</button>
+  </header>
+  <main class="projects-page">
+    <div id="projectsGrid" class="projects-grid"></div>
+  </main>
+</div>
 
-<main>
-  <aside id="params"></aside>
-  <section class="bom" id="bom"></section>
-</main>
+<!-- ===== 视图 2：项目详情（原 BOM 工具） ===== -->
+<div id="viewProject" class="view hidden">
+  <header>
+    <button id="btnBack" class="btn-back">← 我的项目</button>
+    <span class="prj-name" id="hdrPrjName" title="点击编辑项目信息">—</span>
+    <span class="stat">设备数 <b id="kEquipCount">—</b></span>
+    <span class="stat">总套数 <b id="kSetsAll">—</b></span>
+    <span class="stat">围栏总长 <b id="kTotalLen">—</b> m</span>
+    <span class="stat">主螺旋柱 <b id="kMainPoles">—</b> 根</span>
+    <span class="stat grand">总价 ¥<b id="kGrand">—</b></span>
+    <span class="mode" id="modeSwitch">
+      <button data-mode="aggregate">📊 全部设备汇总</button>
+      <button data-mode="single">🔍 单设备视图</button>
+    </span>
+    <span class="spacer"></span>
+    <button id="btnExport" class="act primary">导出 CSV</button>
+    <button id="btnPrint"  class="act">打印</button>
+    <button id="btnReset"  class="act">重置当前项目</button>
+  </header>
+  <main>
+    <aside id="params"></aside>
+    <section class="bom" id="bom"></section>
+  </main>
+</div>
 
 <footer>
   数据基于"双防区张力围栏 BOM 清单_30 线_V5"。<b>每台设备 = 你要卖出的一套设备</b>，左侧"设备列表"可任意添加/重命名/调整其防区与套数；
   右侧 BOM 默认"全部设备汇总"显示真实总用量，切换到"单设备视图"可查看某一台设备的明细。
   <br>BOM 任意行右侧 <code>ƒ</code> 按钮可编辑数量公式（变量含 <code>zoneLen1..N</code>、<code>totalZoneLen</code>、<code>sets</code> 及自定义参数）。
 </footer>
+
+<!-- 项目信息编辑 -->
+<div id="prjModal" class="modal hidden">
+  <div class="modal-card" style="max-width:520px">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="prjModalTitle">项目信息</div>
+        <div class="modal-sub" id="prjModalSub">填写后用于卡片展示与导出</div>
+      </div>
+      <button class="x-btn" id="prjModalClose">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>项目名称</label>
+        <input id="prjF_name" type="text" placeholder="例如：客户A 北门一期" maxlength="60">
+      </div>
+      <div class="form-row">
+        <label>客户/联系人</label>
+        <input id="prjF_customer" type="text" placeholder="可选" maxlength="60">
+      </div>
+      <div class="form-row">
+        <label>备注</label>
+        <textarea id="prjF_description" placeholder="可选：地址、报价说明、施工日期…"></textarea>
+      </div>
+    </div>
+    <div class="fx-actions">
+      <span style="flex:1"></span>
+      <button id="prjModalCancel">取消</button>
+      <button id="prjModalSave" class="primary">保存</button>
+    </div>
+  </div>
+</div>
 
 <!-- 公式编辑器 -->
 <div id="fxModal" class="modal hidden">
@@ -464,6 +588,7 @@ function loadEquipmentList(){
   if(Array.isArray(arr) && arr.length > 0){
     return arr.map(e=>({
       id: e.id || uid(),
+      projectId: e.projectId || null,
       name: String(e.name||"设备"),
       sets: +e.sets || 1,
       mode: e.mode === "single" ? "single" : "double",
@@ -498,8 +623,37 @@ let equipmentList    = loadEquipmentList();
 let activeEquipId    = lsGet("tf_active", null) || equipmentList[0].id;
 let viewMode         = lsGet("tf_view", "aggregate"); // "aggregate" | "single"
 
-// ensure active id is valid
-if(!equipmentList.some(e=>e.id===activeEquipId)) activeEquipId = equipmentList[0].id;
+/* ===== 项目层（阶段一） ===== */
+function defaultProject(idx){
+  const t = Date.now();
+  return { id: "p" + t.toString(36) + Math.random().toString(36).slice(2,6),
+           name: idx ? `项目 ${idx}` : "默认项目",
+           customer:"", description:"",
+           createdAt:t, updatedAt:t };
+}
+function loadProjects(){
+  const arr = lsGet("tf_projects", null);
+  if(Array.isArray(arr) && arr.length) return arr;
+  // 首次迁移：建一个默认项目，把现有设备/自定义子项归到它名下
+  const def = defaultProject(0);
+  equipmentList.forEach(e=>{ if(!e.projectId) e.projectId = def.id; });
+  customItems.forEach(c=>{ if(!c.projectId) c.projectId = def.id; });
+  return [def];
+}
+let projectList     = loadProjects();
+let activeProjectId = lsGet("tf_activePrj", null) || projectList[0].id;
+let viewName        = lsGet("tf_viewName", "projects"); // "projects" | "project"
+
+// 二次保险：所有 equipment / custom item 都必须有 projectId
+const defPid = projectList[0].id;
+equipmentList.forEach(e=>{ if(!e.projectId) e.projectId = defPid; });
+customItems.forEach(c=>{ if(!c.projectId) c.projectId = defPid; });
+
+if(!projectList.some(p=>p.id===activeProjectId)) activeProjectId = projectList[0].id;
+if(!equipmentList.some(e=>e.id===activeEquipId && e.projectId===activeProjectId)){
+  const first = equipmentList.find(e=>e.projectId===activeProjectId);
+  activeEquipId = first ? first.id : null;
+}
 
 function saveAll(){
   lsSet("tf_params", params);
@@ -510,8 +664,45 @@ function saveAll(){
   lsSet("tf_equip", equipmentList);
   lsSet("tf_active", activeEquipId);
   lsSet("tf_view", viewMode);
+  lsSet("tf_projects", projectList);
+  lsSet("tf_activePrj", activeProjectId);
+  lsSet("tf_viewName", viewName);
 }
-function activeEquip(){ return equipmentList.find(e=>e.id===activeEquipId) || equipmentList[0]; }
+
+/* 当前项目相关的过滤器 */
+function activeProject(){ return projectList.find(p=>p.id===activeProjectId) || projectList[0]; }
+function currentEquipments(){ return equipmentList.filter(e=>e.projectId===activeProjectId); }
+function currentCustomItems(){ return customItems.filter(c=>c.projectId===activeProjectId); }
+function activeEquip(){
+  const list = currentEquipments();
+  return list.find(e=>e.id===activeEquipId) || list[0];
+}
+
+/* 项目级 BOM 成本统计（用于卡片显示与汇总） */
+function projectStats(pid){
+  const es  = equipmentList.filter(e=>e.projectId===pid);
+  const cis = customItems.filter(c=>c.projectId===pid);
+  const equipCount = es.length;
+  const zoneCount  = es.reduce((a,e)=>a + (e.zones?.length||0), 0);
+  const totalLen   = es.reduce((a,e)=>{
+    const tz = (e.zones||[]).reduce((b,z)=>b+(+z.length||0), 0);
+    return a + tz * (+e.sets||1);
+  }, 0);
+  const setsCount = es.reduce((a,e)=>a + (+e.sets||1), 0);
+  // 成本：sum(系统行 qty×price for each equipment) + sum(custom items qty×price)
+  let cost = 0;
+  es.forEach(e=>{ cost += equipCost(e); });
+  // 自定义子项以当前 active equip 的作用域评估公式，这里没有 active，用第一个
+  const scopeEquip = es[0];
+  if(scopeEquip){
+    const scope = buildScope(scopeEquip);
+    cis.forEach(c=>{
+      const q = c.qtyFormula ? Math.max(0, evalFormula(c.qtyFormula, scope)||0) : (+c.qty||0);
+      cost += q * (+c.price||0);
+    });
+  }
+  return { equipCount, zoneCount, totalLen, setsCount, cost };
+}
 
 /* =========================================================
  *  作用域 / 公式求值（按设备）
@@ -578,10 +769,10 @@ function sysRowQty(i, equip){
   return Math.max(0, evalFormula(rowFormula(i), buildScope(equip)) || 0);
 }
 function sysRowAggregate(i){
-  return equipmentList.reduce((a, e)=>a + sysRowQty(i, e), 0);
+  return currentEquipments().reduce((a, e)=>a + sysRowQty(i, e), 0);
 }
 function sysRowBreakdown(i){
-  return equipmentList.map(e=>({equip:e, qty: sysRowQty(i, e)}));
+  return currentEquipments().map(e=>({equip:e, qty: sysRowQty(i, e)}));
 }
 /* 自定义项数量（在 active 设备的 scope 下求值） */
 function cusRowQty(c){
@@ -621,7 +812,8 @@ function cparamRow(cp, i){
 
 function renderEquipmentList(){
   let html = "";
-  equipmentList.forEach((e, i)=>{
+  const list = currentEquipments();
+  list.forEach((e, i)=>{
     const tz = e.zones.reduce((a,z)=>a+(+z.length||0),0);
     const on = e.id === activeEquipId;
     html += `<div class="equip-row ${on?'on':''}" data-eid="${e.id}">
@@ -644,11 +836,11 @@ function renderEquipmentList(){
     </div>`;
   });
   html += `<div class="add-line" id="addEquip">+ 新增设备</div>`;
-  // 列表汇总
-  const totalSets = equipmentList.reduce((a,e)=>a + (+e.sets||1), 0);
-  const totalLen  = equipmentList.reduce((a,e)=>a + e.zones.reduce((b,z)=>b+(+z.length||0),0) * (+e.sets||1), 0);
+  // 列表汇总（当前项目内）
+  const totalSets = list.reduce((a,e)=>a + (+e.sets||1), 0);
+  const totalLen  = list.reduce((a,e)=>a + e.zones.reduce((b,z)=>b+(+z.length||0),0) * (+e.sets||1), 0);
   html += `<div class="zone-sum">
-    <div>设备数：<b>${equipmentList.length}</b> · 总套数：<b>${totalSets}</b> · 全部围栏总长：<b>${round2(totalLen)} m</b></div>
+    <div>本项目设备：<b>${list.length}</b> · 总套数：<b>${totalSets}</b> · 围栏总长：<b>${round2(totalLen)} m</b></div>
   </div>`;
   return html;
 }
@@ -825,7 +1017,8 @@ function renderParams(){
       e.stopPropagation();
       const src = equipmentList.find(x=>x.id===eid);
       if(!src) return;
-      const copy = {id: uid(), name: src.name + " (副本)", sets: src.sets,
+      const copy = {id: uid(), projectId: src.projectId, name: src.name + " (副本)",
+                    sets: src.sets, mode: src.mode,
                     zones: src.zones.map(z=>({...z}))};
       const idx = equipmentList.findIndex(x=>x.id===eid);
       equipmentList.splice(idx+1, 0, copy);
@@ -835,18 +1028,22 @@ function renderParams(){
     const del = row.querySelector("button[data-edel]");
     if(del) del.addEventListener("click", e=>{
       e.stopPropagation();
-      if(equipmentList.length <= 1){ alert("至少保留 1 台设备。"); return; }
+      if(currentEquipments().length <= 1){ alert("当前项目至少保留 1 台设备。"); return; }
       const src = equipmentList.find(x=>x.id===eid);
       if(!confirm(`确定删除「${src.name}」？此操作不可撤销。`)) return;
       const idx = equipmentList.findIndex(x=>x.id===eid);
       equipmentList.splice(idx, 1);
-      if(activeEquipId === eid) activeEquipId = equipmentList[Math.max(0,idx-1)].id;
+      if(activeEquipId === eid){
+        const remain = currentEquipments();
+        activeEquipId = remain[0] ? remain[0].id : null;
+      }
       saveAll(); renderParams(); rerender();
     });
   });
   const addE = document.getElementById("addEquip");
   if(addE) addE.addEventListener("click", ()=>{
-    const e = defaultEquipment(equipmentList.length+1);
+    const e = defaultEquipment(currentEquipments().length+1);
+    e.projectId = activeProjectId;
     equipmentList.push(e);
     activeEquipId = e.id;
     saveAll(); renderParams(); rerender();
@@ -907,6 +1104,235 @@ function equipCost(equip){
 }
 
 /* =========================================================
+ *  渲染：项目列表（视图 1）
+ * ========================================================= */
+let prjSearchTerm = "";
+function projectCardHTML(p){
+  const stats = projectStats(p.id);
+  const es = equipmentList.filter(e=>e.projectId===p.id);
+  const created = new Date(p.createdAt||0);
+  const dateStr = `${created.getFullYear()}/${String(created.getMonth()+1).padStart(2,'0')}/${String(created.getDate()).padStart(2,'0')}`;
+  const meta = [
+    p.customer ? `<span class="b">${esc(p.customer)}</span>` : "",
+    `创建于 ${dateStr}`,
+    p.description ? `<span title="${escAttr(p.description)}">📝 ${esc(p.description.slice(0,20))}${p.description.length>20?'…':''}</span>` : "",
+  ].filter(Boolean).join("<span>·</span>");
+  const equipsHTML = es.length === 0
+    ? `<div class="equip-empty">尚无设备 · 点击进入新增</div>`
+    : es.slice(0,5).map(e=>{
+        const tz = e.zones.reduce((a,z)=>a+(+z.length||0),0);
+        return `<div class="equip-mini">
+          <span class="nm">${esc(e.name)}</span>
+          <span class="info">${e.zones.length}区 · ${round2(tz)}m · ${e.sets}套 · ${e.mode==="single"?"单":"双"}</span>
+        </div>`;
+      }).join("") + (es.length>5 ? `<div class="equip-mini"><span class="nm" style="color:var(--muted)">… 还有 ${es.length-5} 台设备</span><span></span></div>` : "");
+  return `<div class="project-card" data-pid="${p.id}">
+    <button class="menu-btn" data-pmenu="${p.id}" title="更多操作">⋮</button>
+    <h3>${esc(p.name)}</h3>
+    <div class="meta">${meta||'<span style="color:var(--muted)">无客户/备注</span>'}</div>
+    <div class="stats">
+      <span class="pill">${stats.equipCount} 设备</span>
+      <span class="pill">${stats.setsCount} 套</span>
+      <span class="pill">${stats.zoneCount} 防区</span>
+      <span class="pill">${round2(stats.totalLen)} m</span>
+      <span class="pill cost">¥${money(stats.cost)}</span>
+    </div>
+    <div class="equip-list">${equipsHTML}</div>
+  </div>`;
+}
+
+function renderProjectsView(){
+  document.getElementById("prjCount").textContent = projectList.length;
+  const grid = document.getElementById("projectsGrid");
+  const term = prjSearchTerm.trim().toLowerCase();
+  const visible = !term ? projectList : projectList.filter(p=>{
+    return (p.name||"").toLowerCase().includes(term)
+        || (p.customer||"").toLowerCase().includes(term)
+        || (p.description||"").toLowerCase().includes(term);
+  });
+  if(visible.length === 0){
+    if(projectList.length === 0){
+      grid.innerHTML = `<div class="empty-state">
+        <h3>还没有项目</h3>
+        <p>点击右上角 "+ 新建项目" 创建第一个项目</p>
+        <button id="emptyNewBtn">+ 立即创建</button>
+      </div>`;
+      const eb = document.getElementById("emptyNewBtn");
+      if(eb) eb.addEventListener("click", ()=>openNewProject());
+    }else{
+      grid.innerHTML = `<div class="empty-state"><h3>未找到匹配项目</h3><p>调整搜索关键词试试</p></div>`;
+    }
+    return;
+  }
+  grid.innerHTML = visible.map(projectCardHTML).join("");
+
+  /* 绑定卡片点击 -> 进入项目 */
+  grid.querySelectorAll(".project-card").forEach(card=>{
+    const pid = card.dataset.pid;
+    card.addEventListener("click", e=>{
+      if(e.target.closest(".menu-btn") || e.target.closest(".menu-pop")) return;
+      enterProject(pid);
+    });
+    const menuBtn = card.querySelector("button[data-pmenu]");
+    if(menuBtn) menuBtn.addEventListener("click", e=>{
+      e.stopPropagation();
+      // 关掉其他打开的菜单
+      document.querySelectorAll(".menu-pop").forEach(m=>m.remove());
+      const pop = document.createElement("div");
+      pop.className = "menu-pop";
+      pop.innerHTML = `
+        <button data-act="open">▶ 进入项目</button>
+        <button data-act="edit">✎ 编辑项目信息</button>
+        <button data-act="dup">⎘ 复制项目（连同设备）</button>
+        <hr>
+        <button data-act="del" class="danger">× 删除项目</button>`;
+      card.appendChild(pop);
+      pop.querySelectorAll("button").forEach(b=>{
+        b.addEventListener("click", ev=>{
+          ev.stopPropagation();
+          const act = b.dataset.act;
+          if(act === "open") enterProject(pid);
+          else if(act === "edit") openProjectEditor(pid);
+          else if(act === "dup")  duplicateProject(pid);
+          else if(act === "del")  deleteProject(pid);
+          pop.remove();
+        });
+      });
+      // click outside closes
+      setTimeout(()=>{
+        const closer = ev=>{ if(!pop.contains(ev.target)){ pop.remove(); document.removeEventListener("click", closer); } };
+        document.addEventListener("click", closer);
+      }, 0);
+    });
+  });
+}
+
+/* ===== 项目 CRUD ===== */
+function openNewProject(){
+  // 立刻建一个空项目并进入编辑器
+  const t = Date.now();
+  const p = { id:"p"+t.toString(36)+Math.random().toString(36).slice(2,6),
+              name:"新项目", customer:"", description:"",
+              createdAt:t, updatedAt:t };
+  projectList.push(p);
+  // 给新项目放一台默认设备，避免空状态
+  const e = defaultEquipment(1);
+  e.projectId = p.id;
+  equipmentList.push(e);
+  activeProjectId = p.id;
+  activeEquipId = e.id;
+  saveAll();
+  openProjectEditor(p.id, /*isNew*/ true);
+  renderProjectsView();
+}
+
+function duplicateProject(pid){
+  const src = projectList.find(p=>p.id===pid);
+  if(!src) return;
+  const t = Date.now();
+  const newPid = "p"+t.toString(36)+Math.random().toString(36).slice(2,6);
+  const copy = { ...src, id:newPid, name: src.name + " (副本)", createdAt:t, updatedAt:t };
+  projectList.push(copy);
+  // 复制其下所有设备和自定义子项
+  equipmentList.filter(e=>e.projectId===pid).forEach(e=>{
+    equipmentList.push({...e, id: uid(), projectId: newPid,
+                        zones: e.zones.map(z=>({...z}))});
+  });
+  customItems.filter(c=>c.projectId===pid).forEach(c=>{
+    customItems.push({...c, projectId: newPid});
+  });
+  saveAll();
+  renderProjectsView();
+}
+
+function deleteProject(pid){
+  if(projectList.length <= 1){ alert("至少保留 1 个项目。"); return; }
+  const src = projectList.find(p=>p.id===pid);
+  if(!src) return;
+  const stats = projectStats(pid);
+  if(!confirm(`确定删除项目「${src.name}」？\n该项目内 ${stats.equipCount} 台设备及自定义条目将一并删除，操作不可撤销。`)) return;
+  projectList = projectList.filter(p=>p.id!==pid);
+  equipmentList = equipmentList.filter(e=>e.projectId!==pid);
+  customItems = customItems.filter(c=>c.projectId!==pid);
+  if(activeProjectId === pid){
+    activeProjectId = projectList[0].id;
+    const first = currentEquipments()[0];
+    activeEquipId = first ? first.id : null;
+  }
+  saveAll();
+  renderProjectsView();
+}
+
+/* ===== 进入/返回 ===== */
+function enterProject(pid){
+  activeProjectId = pid;
+  const first = currentEquipments()[0];
+  activeEquipId = first ? first.id : null;
+  if(!activeEquipId){
+    const e = defaultEquipment(1);
+    e.projectId = pid;
+    equipmentList.push(e);
+    activeEquipId = e.id;
+  }
+  viewName = "project";
+  saveAll();
+  document.getElementById("viewProjects").classList.add("hidden");
+  document.getElementById("viewProject").classList.remove("hidden");
+  // 标题
+  const p = activeProject();
+  document.getElementById("hdrPrjName").textContent = p.name;
+  renderParams(); rerender();
+}
+
+function backToProjects(){
+  viewName = "projects";
+  saveAll();
+  document.getElementById("viewProject").classList.add("hidden");
+  document.getElementById("viewProjects").classList.remove("hidden");
+  renderProjectsView();
+}
+
+/* ===== 项目编辑器（弹窗） ===== */
+let prjEditingId = null;
+let prjEditingIsNew = false;
+function openProjectEditor(pid, isNew){
+  const p = projectList.find(x=>x.id===pid);
+  if(!p) return;
+  prjEditingId = pid;
+  prjEditingIsNew = !!isNew;
+  document.getElementById("prjModalTitle").textContent = isNew ? "新建项目" : "编辑项目信息";
+  document.getElementById("prjF_name").value        = p.name||"";
+  document.getElementById("prjF_customer").value    = p.customer||"";
+  document.getElementById("prjF_description").value = p.description||"";
+  document.getElementById("prjModal").classList.remove("hidden");
+  setTimeout(()=>document.getElementById("prjF_name").focus(), 50);
+}
+function closeProjectEditor(){
+  document.getElementById("prjModal").classList.add("hidden");
+  prjEditingId = null; prjEditingIsNew = false;
+}
+document.getElementById("prjModalClose").addEventListener("click", closeProjectEditor);
+document.getElementById("prjModalCancel").addEventListener("click", closeProjectEditor);
+document.getElementById("prjModal").addEventListener("click", e=>{
+  if(e.target.id === "prjModal") closeProjectEditor();
+});
+document.getElementById("prjModalSave").addEventListener("click", ()=>{
+  if(!prjEditingId) return;
+  const p = projectList.find(x=>x.id===prjEditingId);
+  if(!p) return;
+  const name = document.getElementById("prjF_name").value.trim();
+  if(!name){ alert("项目名称不能为空"); return; }
+  p.name        = name;
+  p.customer    = document.getElementById("prjF_customer").value.trim();
+  p.description = document.getElementById("prjF_description").value.trim();
+  p.updatedAt   = Date.now();
+  saveAll();
+  closeProjectEditor();
+  if(viewName === "projects") renderProjectsView();
+  else { document.getElementById("hdrPrjName").textContent = p.name; }
+});
+
+/* =========================================================
  *  渲染：BOM
  * ========================================================= */
 function rerender(){
@@ -936,9 +1362,10 @@ function renderBOM(){
   // 顶部提示横幅
   let html = "";
   if(isAgg){
+    const projE = currentEquipments();
     html += `<div class="bom-banner">
       <span class="badge">汇总</span>
-      <b>全部 ${equipmentList.length} 台设备 / ${equipmentList.reduce((a,e)=>a+(+e.sets||1),0)} 套</b>
+      <b>本项目 ${projE.length} 台设备 / ${projE.reduce((a,e)=>a+(+e.sets||1),0)} 套</b>
       系统行数量 = 各设备按其自身防区与套数分别求值后求和；自定义子项以填写值计入（在当前选中设备的作用域下求公式）。
     </div>`;
   }else{
@@ -962,6 +1389,7 @@ function renderBOM(){
   });
   const cusBySec = {};
   customItems.forEach((c, ci)=>{
+    if(c.projectId !== activeProjectId) return;
     const sec = c.sec || "其他自定义";
     (cusBySec[sec] = cusBySec[sec] || []).push({c, ci});
   });
@@ -1087,7 +1515,7 @@ function renderBOM(){
   });
   root.querySelectorAll("[data-addsec]").forEach(b=>{
     b.addEventListener("click", ()=>{
-      customItems.push({sec:b.dataset.addsec, name:"", spec:"", unit:"个", qty:1, price:0, note:""});
+      customItems.push({projectId: activeProjectId, sec:b.dataset.addsec, name:"", spec:"", unit:"个", qty:1, price:0, note:""});
       saveAll(); rerender();
     });
   });
@@ -1111,6 +1539,7 @@ function renderSummary(){
   });
   let cusOther = 0;
   customItems.forEach(c=>{
+    if(c.projectId !== activeProjectId) return;
     const s = cusRowQty(c) * (Number(c.price)||0);
     const t = sectionType(c.sec);
     if(t === "std") std += s;
@@ -1119,15 +1548,16 @@ function renderSummary(){
   });
   const grand = std + opt + cusOther;
 
-  // 顶部 stats
-  document.getElementById("kEquipCount").textContent = equipmentList.length;
-  document.getElementById("kSetsAll").textContent    = equipmentList.reduce((a,e)=>a+(+e.sets||1),0);
+  // 顶部 stats（按当前项目）
+  const projEquips = currentEquipments();
+  document.getElementById("kEquipCount").textContent = projEquips.length;
+  document.getElementById("kSetsAll").textContent    = projEquips.reduce((a,e)=>a+(+e.sets||1),0);
   if(isAgg){
-    const totalLen = equipmentList.reduce((a,e)=>{
+    const totalLen = projEquips.reduce((a,e)=>{
       const tz = e.zones.reduce((b,z)=>b+(+z.length||0), 0);
       return a + tz * (+e.sets||1);
     }, 0);
-    const mainPoles = equipmentList.reduce((a,e)=>{
+    const mainPoles = projEquips.reduce((a,e)=>{
       const pp = e.zones.reduce((b,z)=>b+zonePoles(z, params.mainSpacing), 0);
       return a + pp * (+e.sets||1);
     }, 0);
@@ -1286,8 +1716,13 @@ function escAttr(s){ if(s==null)return""; return esc(s).replace(/"/g,"&quot;"); 
  *  CSV 导出（含设备清单 + 汇总 BOM + 各设备明细）
  * ========================================================= */
 function exportCSV(){
+  const proj = activeProject();
+  const projEquips = equipmentList.filter(e=>e.projectId===proj.id);
+  const projCustom = customItems.filter(c=>c.projectId===proj.id);
   const lines = [];
-  lines.push(["张力围栏 · 多设备成本清单"]);
+  lines.push(["张力围栏 · 项目成本清单"]);
+  lines.push([`项目：${proj.name}${proj.customer?" · 客户："+proj.customer:""}`]);
+  if(proj.description) lines.push([`备注：${proj.description}`]);
   lines.push([`生成时间: ${new Date().toLocaleString("zh-CN")}`]);
   lines.push([]);
   lines.push(["产品规格参数（共享）"]);
@@ -1304,10 +1739,10 @@ function exportCSV(){
 
   /* 设备清单 */
   lines.push([]);
-  lines.push(["设备列表"]);
+  lines.push(["本项目设备列表"]);
   lines.push(["序号","设备名称","模式","套数","防区数","单套总长(m)","本设备总长(m)","主螺旋柱(根)","本设备总价(元)"]);
   let allCost = 0;
-  equipmentList.forEach((e, i)=>{
+  projEquips.forEach((e, i)=>{
     const d = derivedFor(e);
     const cost = equipCost(e);
     allCost += cost;
@@ -1318,7 +1753,7 @@ function exportCSV(){
   lines.push([]);
   lines.push(["设备防区明细"]);
   lines.push(["设备","防区序号","防区名称","长度(m)","主螺旋柱(根)"]);
-  equipmentList.forEach(e=>{
+  projEquips.forEach(e=>{
     e.zones.forEach((z, j)=>{
       lines.push([e.name, j+1, z.name, +z.length||0, zonePoles(z, params.mainSpacing)]);
     });
@@ -1326,9 +1761,9 @@ function exportCSV(){
 
   /* 汇总 BOM */
   lines.push([]);
-  lines.push(["全部设备 BOM 汇总"]);
+  lines.push(["本项目 BOM 汇总"]);
   const headers = ["序号","分类","类型","部件名称","规格","单位","数量(合计)","单价(元)","小计(元)","数量公式","备注"];
-  equipmentList.forEach(e=>{ headers.push(`数量:${e.name}`); });
+  projEquips.forEach(e=>{ headers.push(`数量:${e.name}`); });
   lines.push(headers);
 
   const sysBySec = {};
@@ -1336,7 +1771,7 @@ function exportCSV(){
     (sysBySec[it.sec] = sysBySec[it.sec] || []).push({it, i});
   });
   const cusBySec = {};
-  customItems.forEach((c, ci)=>{
+  projCustom.forEach((c, ci)=>{
     const sec = c.sec || "其他自定义";
     (cusBySec[sec] = cusBySec[sec] || []).push({c, ci});
   });
@@ -1352,7 +1787,7 @@ function exportCSV(){
     const typeText = t === "std" ? "标准" : (t === "opt" ? "选配" : "自定义");
     for(const {it, i} of sysRows){
       const price = priceOverrides[i] !== undefined ? priceOverrides[i] : it.price;
-      const breakdown = equipmentList.map(e=>sysRowQty(i, e));
+      const breakdown = projEquips.map(e=>sysRowQty(i, e));
       const qty = breakdown.reduce((a,b)=>a+b, 0);
       const sub = qty*price;
       if(t === "std") std += sub; else if(t === "opt") opt += sub;
@@ -1368,8 +1803,7 @@ function exportCSV(){
       const row = [`+${n+1}`, sec, "自定义", c.name, c.spec, c.unit,
                    fmtQty(q), c.price, sub.toFixed(2),
                    c.qtyFormula||String(c.qty||0), c.note];
-      // 自定义项不按设备分解（在 active 设备求值），各设备列留空
-      equipmentList.forEach(()=>row.push(""));
+      projEquips.forEach(()=>row.push(""));
       lines.push(row);
     });
   }
@@ -1384,7 +1818,8 @@ function exportCSV(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   const ts = new Date().toISOString().slice(0,16).replace(/[:T]/g,"-");
-  a.href = url; a.download = `张力围栏BOM_${ts}.csv`;
+  const safeName = (proj.name||"项目").replace(/[\/\\?*:|"<>]/g,"_");
+  a.href = url; a.download = `${safeName}_BOM_${ts}.csv`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
@@ -1400,12 +1835,16 @@ function csvCell(v){
 document.getElementById("btnExport").addEventListener("click", exportCSV);
 document.getElementById("btnPrint").addEventListener("click", ()=>window.print());
 document.getElementById("btnReset").addEventListener("click", ()=>{
-  if(!confirm("重置：内置参数恢复默认、单价/公式覆盖清空、设备列表恢复为一台默认设备。\n（自定义参数与自定义子项保留）")) return;
-  for(const k in DEFAULT_PARAMS) params[k] = DEFAULT_PARAMS[k].v;
-  priceOverrides = {};
-  formulaOverrides = {};
-  equipmentList = [defaultEquipment(1)];
-  activeEquipId = equipmentList[0].id;
+  const proj = activeProject();
+  if(!confirm(`重置「${proj.name}」：将清空该项目内的设备和自定义子项，恢复为一台默认设备。\n（其他项目、共享参数、单价/公式覆盖均保留）`)) return;
+  // 删掉当前项目的设备和自定义子项
+  equipmentList = equipmentList.filter(e=>e.projectId !== proj.id);
+  customItems = customItems.filter(c=>c.projectId !== proj.id);
+  // 加一台默认设备
+  const e = defaultEquipment(1);
+  e.projectId = proj.id;
+  equipmentList.push(e);
+  activeEquipId = e.id;
   saveAll();
   renderParams(); rerender();
 });
@@ -1416,9 +1855,59 @@ document.querySelectorAll("#modeSwitch button").forEach(b=>{
   });
 });
 
-/* 初始化 */
-renderParams();
-rerender();
+/* ===== 项目视图相关按钮绑定 ===== */
+document.getElementById("btnBack").addEventListener("click", backToProjects);
+document.getElementById("btnNewPrj").addEventListener("click", openNewProject);
+document.getElementById("hdrPrjName").addEventListener("click", ()=>{
+  openProjectEditor(activeProjectId, false);
+});
+document.getElementById("prjSearch").addEventListener("input", e=>{
+  prjSearchTerm = e.target.value;
+  renderProjectsView();
+});
+
+/* 项目列表页"导出 CSV" — 导出所有项目的汇总表 */
+document.getElementById("btnPrjExport").addEventListener("click", ()=>{
+  const lines = [];
+  lines.push(["全部项目汇总"]);
+  lines.push([`生成时间: ${new Date().toLocaleString("zh-CN")}`]);
+  lines.push([]);
+  lines.push(["项目名称","客户","设备数","总套数","防区数","围栏总长(m)","总成本(元)","创建时间","备注"]);
+  let totalCost = 0, totalEquip = 0, totalSets = 0, totalLen = 0;
+  projectList.forEach(p=>{
+    const s = projectStats(p.id);
+    totalCost += s.cost; totalEquip += s.equipCount;
+    totalSets += s.setsCount; totalLen += s.totalLen;
+    const dt = new Date(p.createdAt||0);
+    lines.push([p.name, p.customer||"", s.equipCount, s.setsCount, s.zoneCount,
+                round2(s.totalLen), s.cost.toFixed(2),
+                `${dt.getFullYear()}/${dt.getMonth()+1}/${dt.getDate()}`,
+                p.description||""]);
+  });
+  lines.push([]);
+  lines.push(["合计","",totalEquip,totalSets,"",round2(totalLen),totalCost.toFixed(2),"",""]);
+  const csv = "﻿" + lines.map(r=>r.map(csvCell).join(",")).join("\r\n");
+  const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const ts = new Date().toISOString().slice(0,16).replace(/[:T]/g,"-");
+  a.href = url; a.download = `全部项目汇总_${ts}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+});
+
+/* ===== 初始化（按上次保存的视图） ===== */
+if(viewName === "project" && activeProject()){
+  document.getElementById("viewProjects").classList.add("hidden");
+  document.getElementById("viewProject").classList.remove("hidden");
+  document.getElementById("hdrPrjName").textContent = activeProject().name;
+  renderParams();
+  rerender();
+}else{
+  document.getElementById("viewProject").classList.add("hidden");
+  document.getElementById("viewProjects").classList.remove("hidden");
+  renderProjectsView();
+}
 </script>
 
 </body>
