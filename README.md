@@ -21,9 +21,33 @@
 
 基于"双防区张力围栏 BOM 清单 V5（30 线）"模板，价格与公式可在页面上覆盖修改。
 
-## 部署
+## 登录与用户（阶段二 · 后端）
 
-静态文件，无后端，无构建步骤。Cloudflare Pages / GitHub Pages / Vercel / Netlify / 阿里云 OSS / 腾讯云 COS 均可。
+自 2.0 起接入 **Cloudflare Pages Functions + D1** 后端：
+
+- 进应用需**登录**；账号与密码（PBKDF2 哈希）存在 D1，登录态用 HttpOnly 会话 cookie。
+- 超级管理员 **admin / adminyy**（首次访问后端自动种入），可对用户增删改查与重置密码。
+- 因为有后端，**不能再用 file:// 双击打开**；需通过部署后的网址，或本地 `npm run dev` 访问。
+
+## 本地开发
+
+```bash
+npm install                 # 安装 wrangler
+npm run db:local            # 建本地 D1 表（首次一次即可）
+npm run dev                 # 启动 http://localhost:8788 （前端 + /api + 本地 D1）
+```
+
+## 部署（Cloudflare Pages + D1）
+
+```bash
+npx wrangler login                              # 登录你的 Cloudflare 账号
+npx wrangler d1 create tension-fence-cost-db    # 建 D1，把返回的 database_id 填进 wrangler.toml
+npm run db:remote                               # 给线上 D1 建表
+git add -A && git commit -m "..." && git push   # 触发 Pages 自动构建（含 functions/）
+```
+
+> ⚠️ 若用 Cloudflare Pages 的 Git 自动部署：还需在 **Pages 项目 → Settings → Functions → D1 database bindings** 里加一个绑定，变量名必须是 **`DB`**，数据库选 `tension-fence-cost-db`。
+> 详细步骤见 [`HANDOFF.md`](./HANDOFF.md) 第 13 节。
 
 ## 继续开发 / 交接
 

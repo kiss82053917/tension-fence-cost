@@ -1,0 +1,15 @@
+{
+  "name": "tension-fence-cost",
+  "version": "2.0.0",
+  "private": true,
+  "description": "张力围栏多设备成本工具 — 前端 + Cloudflare Pages Functions + D1 后端",
+  "scripts": {
+    "db:local": "wrangler d1 execute tension-fence-cost-db --local --file=./schema.sql",
+    "db:remote": "wrangler d1 execute tension-fence-cost-db --remote --file=./schema.sql",
+    "dev": "wrangler pages dev .",
+    "deploy": "wrangler pages deploy ."
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}

@@ -231,7 +231,7 @@
   .projects-header .stat{display:inline-flex;align-items:baseline;gap:6px;padding:4px 10px;
     background:var(--soft);border-radius:6px}
   .projects-header .stat b{color:var(--brand-2);font-size:14px}
-  .projects-page{padding:20px}
+  .projects-page{display:block;padding:20px}
   .projects-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(340px, 1fr));gap:14px}
   .project-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
     padding:14px 16px;cursor:pointer;transition:all .15s;position:relative;display:flex;
@@ -294,18 +294,73 @@
     border-radius:6px;font-size:13px;width:100%;font-family:inherit}
   .form-row input:focus,.form-row textarea:focus{outline:none;border-color:var(--brand)}
   .form-row textarea{min-height:60px;resize:vertical}
+
+  /* ===== 登录视图 ===== */
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  .login-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:30px 32px;
+    width:360px;box-shadow:0 12px 40px rgba(0,0,0,.08)}
+  .login-card h1{font-size:20px;color:var(--brand-2);margin:0 0 4px;text-align:center}
+  .login-card .sub{color:var(--muted);font-size:12.5px;text-align:center;margin-bottom:20px}
+  .login-card .lf{margin:12px 0}
+  .login-card label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+  .login-card input{width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:7px;font-size:14px}
+  .login-card input:focus{outline:none;border-color:var(--brand)}
+  .login-card button{width:100%;margin-top:18px;padding:10px;background:var(--brand);color:#fff;
+    border:none;border-radius:7px;font-size:14px;cursor:pointer}
+  .login-card button:hover{background:var(--brand-2)}
+  .login-err{color:var(--bad);font-size:12.5px;text-align:center;margin-top:10px;min-height:16px}
+
+  /* ===== 用户管理视图 ===== */
+  .users-page{display:block;padding:20px;max-width:900px;margin:0 auto}
+  .users-table{width:100%;background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .users-table th,.users-table td{padding:10px 14px;border-bottom:1px solid #eef0f5;text-align:left}
+  .users-table th{background:#fafbfd;color:var(--muted);font-weight:500;position:static}
+  .users-table tr:last-child td{border-bottom:none}
+  .user-tag{font-size:11px;padding:1px 8px;border-radius:10px;white-space:nowrap}
+  .user-tag.admin{background:#fee2e2;color:#b91c1c}
+  .user-tag.user{background:var(--soft);color:var(--brand)}
+  .u-op{padding:4px 10px;border:1px solid var(--line);background:#fff;border-radius:5px;cursor:pointer;
+    font-size:12px;margin-left:4px;color:var(--ink)}
+  .u-op:hover{background:var(--soft);border-color:var(--brand);color:var(--brand)}
+  .u-op.danger{color:var(--bad)}
+  .u-op.danger:hover{background:#fee2e2;border-color:var(--bad)}
+  .u-op:disabled{opacity:.4;cursor:not-allowed}
+  header .stat.user b{color:var(--brand-2)}
 </style>
 </head>
 <body>
 
+<!-- ===== 视图 0：登录 ===== -->
+<div id="viewLogin" class="view hidden">
+  <div class="login-wrap">
+    <div class="login-card">
+      <h1>张力围栏 · 成本工具</h1>
+      <div class="sub">请登录后使用</div>
+      <div class="lf">
+        <label>用户名</label>
+        <input id="loginUser" type="text" autocomplete="username" placeholder="用户名">
+      </div>
+      <div class="lf">
+        <label>密码</label>
+        <input id="loginPwd" type="password" autocomplete="current-password" placeholder="密码">
+      </div>
+      <button id="btnLogin">登 录</button>
+      <div class="login-err" id="loginErr"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== 视图 1：项目列表 ===== -->
-<div id="viewProjects" class="view">
+<div id="viewProjects" class="view hidden">
   <header class="projects-header">
     <h2>📁 我的项目</h2>
     <span class="stat">共 <b id="prjCount">0</b> 个</span>
     <input id="prjSearch" class="search" placeholder="搜索项目名 / 客户...">
     <button id="btnNewPrj" class="act primary">+ 新建项目</button>
     <button id="btnPrjExport" class="act">导出 CSV</button>
+    <button id="btnUsers" class="act" style="display:none">👤 用户管理</button>
+    <span class="stat user" id="curUserChip" title="当前登录用户">—</span>
+    <button id="btnLogout" class="act">退出登录</button>
   </header>
   <main class="projects-page">
     <div id="projectsGrid" class="projects-grid"></div>
@@ -330,10 +385,25 @@
     <button id="btnExport" class="act primary">导出 CSV</button>
     <button id="btnPrint"  class="act">打印</button>
     <button id="btnReset"  class="act">重置当前项目</button>
+    <button id="btnLogout2" class="act">退出</button>
   </header>
   <main>
     <aside id="params"></aside>
     <section class="bom" id="bom"></section>
+  </main>
+</div>
+
+<!-- ===== 视图 3：用户管理（仅管理员） ===== -->
+<div id="viewUsers" class="view hidden">
+  <header class="projects-header">
+    <h2>👤 用户管理</h2>
+    <span class="stat">共 <b id="userCount">0</b> 个用户</span>
+    <span class="search" style="flex:1;border:none;background:transparent"></span>
+    <button id="btnUserBack" class="btn-back">← 返回项目</button>
+    <button id="btnNewUser" class="act primary">+ 新建用户</button>
+  </header>
+  <main class="users-page">
+    <table class="users-table" id="usersTable"></table>
   </main>
 </div>
 
@@ -371,6 +441,36 @@
       <span style="flex:1"></span>
       <button id="prjModalCancel">取消</button>
       <button id="prjModalSave" class="primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 用户新建/编辑 -->
+<div id="userModal" class="modal hidden">
+  <div class="modal-card" style="max-width:420px">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="userModalTitle">新建用户</div>
+        <div class="modal-sub">用户名 + 初始密码 + 角色</div>
+      </div>
+      <button class="x-btn" id="userModalClose">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row"><label>用户名</label>
+        <input id="uF_name" type="text" maxlength="40" placeholder="登录用户名"></div>
+      <div class="form-row" id="uF_pwdRow"><label>初始密码</label>
+        <input id="uF_pwd" type="text" maxlength="60" placeholder="初始密码"></div>
+      <div class="form-row"><label>角色</label>
+        <select id="uF_role" style="padding:6px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px">
+          <option value="user">普通用户</option>
+          <option value="admin">管理员</option>
+        </select>
+      </div>
+    </div>
+    <div class="fx-actions">
+      <span style="flex:1"></span>
+      <button id="userModalCancel">取消</button>
+      <button id="userModalSave" class="primary">保存</button>
     </div>
   </div>
 </div>
@@ -1208,22 +1308,26 @@ function renderProjectsView(){
 }
 
 /* ===== 项目 CRUD ===== */
+/* 项目名唯一化：重名则追加序号（"名字 2"、"名字 3"…），excludeId 跳过自身 */
+function uniqueProjectName(name, excludeId){
+  const base = (name||"").trim() || "未命名项目";
+  const taken = new Set(projectList.filter(p=>p.id!==excludeId).map(p=>p.name));
+  if(!taken.has(base)) return base;
+  let n = 2;
+  while(taken.has(`${base} ${n}`)) n++;
+  return `${base} ${n}`;
+}
+
 function openNewProject(){
-  // 立刻建一个空项目并进入编辑器
-  const t = Date.now();
-  const p = { id:"p"+t.toString(36)+Math.random().toString(36).slice(2,6),
-              name:"新项目", customer:"", description:"",
-              createdAt:t, updatedAt:t };
-  projectList.push(p);
-  // 给新项目放一台默认设备，避免空状态
-  const e = defaultEquipment(1);
-  e.projectId = p.id;
-  equipmentList.push(e);
-  activeProjectId = p.id;
-  activeEquipId = e.id;
-  saveAll();
-  openProjectEditor(p.id, /*isNew*/ true);
-  renderProjectsView();
+  // 仅打开空白编辑器；点「保存」时才真正创建项目（避免取消也残留空项目）
+  prjEditingId = null;
+  prjEditingIsNew = true;
+  document.getElementById("prjModalTitle").textContent = "新建项目";
+  document.getElementById("prjF_name").value        = "";
+  document.getElementById("prjF_customer").value    = "";
+  document.getElementById("prjF_description").value = "";
+  document.getElementById("prjModal").classList.remove("hidden");
+  setTimeout(()=>document.getElementById("prjF_name").focus(), 50);
 }
 
 function duplicateProject(pid){
@@ -1231,7 +1335,7 @@ function duplicateProject(pid){
   if(!src) return;
   const t = Date.now();
   const newPid = "p"+t.toString(36)+Math.random().toString(36).slice(2,6);
-  const copy = { ...src, id:newPid, name: src.name + " (副本)", createdAt:t, updatedAt:t };
+  const copy = { ...src, id:newPid, name: uniqueProjectName(src.name + " (副本)", null), createdAt:t, updatedAt:t };
   projectList.push(copy);
   // 复制其下所有设备和自定义子项
   equipmentList.filter(e=>e.projectId===pid).forEach(e=>{
@@ -1317,14 +1421,35 @@ document.getElementById("prjModal").addEventListener("click", e=>{
   if(e.target.id === "prjModal") closeProjectEditor();
 });
 document.getElementById("prjModalSave").addEventListener("click", ()=>{
-  if(!prjEditingId) return;
+  const nameRaw     = document.getElementById("prjF_name").value.trim();
+  if(!nameRaw){ alert("项目名称不能为空"); return; }
+  const customer    = document.getElementById("prjF_customer").value.trim();
+  const description = document.getElementById("prjF_description").value.trim();
+
+  if(prjEditingIsNew && !prjEditingId){
+    // 新建：到这一步才真正创建项目 + 一台默认设备
+    const t = Date.now();
+    const p = { id:"p"+t.toString(36)+Math.random().toString(36).slice(2,6),
+                name: uniqueProjectName(nameRaw, null),
+                customer, description, createdAt:t, updatedAt:t };
+    projectList.push(p);
+    const e = defaultEquipment(1);
+    e.projectId = p.id;
+    equipmentList.push(e);
+    activeProjectId = p.id;
+    activeEquipId   = e.id;
+    saveAll();
+    closeProjectEditor();
+    renderProjectsView();
+    return;
+  }
+
+  // 编辑现有项目
   const p = projectList.find(x=>x.id===prjEditingId);
   if(!p) return;
-  const name = document.getElementById("prjF_name").value.trim();
-  if(!name){ alert("项目名称不能为空"); return; }
-  p.name        = name;
-  p.customer    = document.getElementById("prjF_customer").value.trim();
-  p.description = document.getElementById("prjF_description").value.trim();
+  p.name        = uniqueProjectName(nameRaw, p.id);
+  p.customer    = customer;
+  p.description = description;
   p.updatedAt   = Date.now();
   saveAll();
   closeProjectEditor();
@@ -1896,18 +2021,227 @@ document.getElementById("btnPrjExport").addEventListener("click", ()=>{
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
 });
 
-/* ===== 初始化（按上次保存的视图） ===== */
-if(viewName === "project" && activeProject()){
-  document.getElementById("viewProjects").classList.add("hidden");
-  document.getElementById("viewProject").classList.remove("hidden");
-  document.getElementById("hdrPrjName").textContent = activeProject().name;
-  renderParams();
-  rerender();
-}else{
-  document.getElementById("viewProject").classList.add("hidden");
-  document.getElementById("viewProjects").classList.remove("hidden");
-  renderProjectsView();
+/* =========================================================
+ *  用户管理 / 登录（阶段二 · 后端 D1 鉴权）
+ *  登录态由后端会话 cookie(tf_sid) 维持；用户与密码（PBKDF2）存于 D1。
+ *  本段只负责调用 /api/*；项目/设备数据当前仍存 localStorage（阶段 2.3 再迁移上云）。
+ *  超级管理员 admin/adminyy 由后端首次访问时自动种入。
+ * ========================================================= */
+let currentUser = null;   // { username, role }，来自 /api/me
+let userEditing = null;   // 正在编辑的用户 id（null = 新建）
+
+function isAdmin(){ return !!(currentUser && currentUser.role === "admin"); }
+
+/* 统一的 API 调用：同源、带 cookie、JSON；非 2xx 抛出 error 文案 */
+async function api(path, { method = "GET", body } = {}){
+  const res = await fetch("/api/" + path, {
+    method,
+    credentials: "include",
+    headers: body ? { "content-type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let data = {};
+  try{ data = await res.json(); }catch(e){}
+  if(!res.ok) throw new Error(data.error || `请求失败 (${res.status})`);
+  return data;
 }
+
+/* ===== 登录态 ===== */
+async function doLogin(name, pwd){
+  const err = document.getElementById("loginErr");
+  err.style.color = "var(--muted)"; err.textContent = "登录中…";
+  try{
+    const { user } = await api("login", { method:"POST", body:{ username:name, password:pwd } });
+    currentUser = user;
+    err.textContent = ""; err.style.color = "";
+    document.getElementById("loginPwd").value = "";
+    mountApp();
+  }catch(e){
+    err.style.color = "var(--bad)"; err.textContent = e.message;
+  }
+}
+async function doLogout(){
+  try{ await api("logout", { method:"POST" }); }catch(e){}
+  currentUser = null;
+  showLogin();
+}
+function showLogin(){
+  ["viewProjects","viewProject","viewUsers"].forEach(id=>document.getElementById(id).classList.add("hidden"));
+  document.getElementById("viewLogin").classList.remove("hidden");
+  document.getElementById("loginUser").value = "";
+  document.getElementById("loginPwd").value = "";
+  document.getElementById("loginErr").textContent = "";
+  setTimeout(()=>document.getElementById("loginUser").focus(), 50);
+}
+
+/* 顶部用户信息条 + 管理入口可见性 */
+function updateUserChrome(){
+  const chip = document.getElementById("curUserChip");
+  if(chip && currentUser) chip.innerHTML = `${esc(currentUser.username)} · <b>${currentUser.role==="admin"?"管理员":"用户"}</b>`;
+  const bu = document.getElementById("btnUsers");
+  if(bu) bu.style.display = isAdmin() ? "" : "none";
+}
+
+/* 登录成功后进入应用（沿用上次保存的视图） */
+function mountApp(){
+  document.getElementById("viewLogin").classList.add("hidden");
+  document.getElementById("viewUsers").classList.add("hidden");
+  updateUserChrome();
+  if(viewName === "project" && activeProject()){
+    document.getElementById("viewProjects").classList.add("hidden");
+    document.getElementById("viewProject").classList.remove("hidden");
+    document.getElementById("hdrPrjName").textContent = activeProject().name;
+    renderParams(); rerender();
+  }else{
+    document.getElementById("viewProject").classList.add("hidden");
+    document.getElementById("viewProjects").classList.remove("hidden");
+    renderProjectsView();
+  }
+}
+
+/* ===== 用户管理视图 ===== */
+function openUsersView(){
+  if(!isAdmin()){ alert("仅管理员可访问用户管理。"); return; }
+  ["viewProjects","viewProject"].forEach(id=>document.getElementById(id).classList.add("hidden"));
+  document.getElementById("viewUsers").classList.remove("hidden");
+  renderUsersView();
+}
+function backFromUsers(){
+  document.getElementById("viewUsers").classList.add("hidden");
+  mountApp();
+}
+async function renderUsersView(){
+  const t = document.getElementById("usersTable");
+  t.innerHTML = `<tbody><tr><td style="padding:14px;color:var(--muted)">加载中…</td></tr></tbody>`;
+  let list = [];
+  try{
+    const data = await api("users");
+    list = data.users || [];
+  }catch(e){
+    t.innerHTML = `<tbody><tr><td style="padding:14px;color:var(--bad)">加载失败：${esc(e.message)}</td></tr></tbody>`;
+    return;
+  }
+  document.getElementById("userCount").textContent = list.length;
+  let html = `<thead><tr><th>用户名</th><th>角色</th><th>创建时间</th>
+    <th style="text-align:right">操作</th></tr></thead><tbody>`;
+  list.forEach(u=>{
+    const isSuper = u.username === "admin";
+    const isSelf  = currentUser && u.username === currentUser.username;
+    const dt = new Date(u.created_at||0);
+    const dstr = `${dt.getFullYear()}/${String(dt.getMonth()+1).padStart(2,'0')}/${String(dt.getDate()).padStart(2,'0')}`;
+    const noDelReason = isSuper ? "超级管理员不可删除" : (isSelf ? "不能删除当前登录账号" : "");
+    html += `<tr>
+      <td><b>${esc(u.username)}</b>${isSuper?' <span class="user-tag admin">超级管理员</span>':(isSelf?' <span class="user-tag user">我</span>':'')}</td>
+      <td><span class="user-tag ${u.role==='admin'?'admin':'user'}">${u.role==='admin'?'管理员':'普通用户'}</span></td>
+      <td style="color:var(--muted)">${dstr}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="u-op" data-uact="reset" data-id="${escAttr(u.id)}" data-u="${escAttr(u.username)}">重置密码</button>
+        <button class="u-op" data-uact="edit" data-id="${escAttr(u.id)}" data-u="${escAttr(u.username)}" data-role="${u.role}" ${isSuper?'disabled title="超级管理员不可编辑"':''}>编辑</button>
+        <button class="u-op danger" data-uact="del" data-id="${escAttr(u.id)}" data-u="${escAttr(u.username)}" ${noDelReason?('disabled title="'+noDelReason+'"'):''}>删除</button>
+      </td>
+    </tr>`;
+  });
+  html += `</tbody>`;
+  t.innerHTML = html;
+  t.querySelectorAll("button[data-uact]").forEach(b=>{
+    b.addEventListener("click", ()=>{
+      if(b.disabled) return;
+      const id = b.dataset.id, name = b.dataset.u, act = b.dataset.uact;
+      if(act === "reset")     resetUserPwd(id, name);
+      else if(act === "edit") openUserModal({ id, username:name, role:b.dataset.role });
+      else if(act === "del")  deleteUser(id, name);
+    });
+  });
+}
+async function resetUserPwd(id, username){
+  const np = prompt(`为「${username}」设置新密码：`, "");
+  if(np === null) return;
+  if(!np.trim()){ alert("密码不能为空。"); return; }
+  try{
+    await api(`users/${id}/reset`, { method:"POST", body:{ password: np.trim() } });
+    alert(`已重置「${username}」的密码。`);
+  }catch(e){ alert("重置失败：" + e.message); }
+}
+async function deleteUser(id, username){
+  if(!confirm(`确定删除用户「${username}」？此操作不可撤销。`)) return;
+  try{
+    await api(`users/${id}`, { method:"DELETE" });
+    renderUsersView();
+  }catch(e){ alert("删除失败：" + e.message); }
+}
+
+/* ===== 用户新建 / 编辑弹窗 ===== */
+function openUserModal(user){
+  const isEdit = !!user;
+  if(isEdit && user.username === "admin"){ alert("超级管理员不可编辑。"); return; }
+  userEditing = isEdit ? user.id : null;
+  document.getElementById("userModalTitle").textContent = isEdit ? "编辑用户" : "新建用户";
+  document.getElementById("uF_name").value = isEdit ? user.username : "";
+  document.getElementById("uF_role").value = isEdit ? user.role : "user";
+  document.getElementById("uF_pwd").value  = "";
+  document.getElementById("uF_pwdRow").style.display = isEdit ? "none" : "";  // 编辑时密码用「重置密码」单独改
+  document.getElementById("userModal").classList.remove("hidden");
+  setTimeout(()=>document.getElementById("uF_name").focus(), 50);
+}
+function closeUserModal(){
+  document.getElementById("userModal").classList.add("hidden");
+  userEditing = null;
+}
+async function saveUserModal(){
+  const name = document.getElementById("uF_name").value.trim();
+  const role = document.getElementById("uF_role").value === "admin" ? "admin" : "user";
+  if(!name){ alert("用户名不能为空。"); return; }
+  if(!/^[\w.@-]{1,40}$/.test(name)){ alert("用户名只能包含字母、数字及 . _ - @，最多 40 字。"); return; }
+  try{
+    if(userEditing){
+      await api(`users/${userEditing}`, { method:"PATCH", body:{ username:name, role } });
+    }else{
+      const pwd = document.getElementById("uF_pwd").value;
+      if(!pwd.trim()){ alert("请设置初始密码。"); return; }
+      await api("users", { method:"POST", body:{ username:name, password:pwd.trim(), role } });
+    }
+    closeUserModal();
+    renderUsersView();
+  }catch(e){ alert("保存失败：" + e.message); }
+}
+
+/* ===== 鉴权相关按钮绑定 ===== */
+document.getElementById("btnLogin").addEventListener("click", ()=>{
+  doLogin(document.getElementById("loginUser").value.trim(), document.getElementById("loginPwd").value);
+});
+["loginUser","loginPwd"].forEach(id=>{
+  document.getElementById(id).addEventListener("keydown", e=>{
+    if(e.key === "Enter"){ e.preventDefault(); document.getElementById("btnLogin").click(); }
+  });
+});
+document.getElementById("btnLogout").addEventListener("click", doLogout);
+const _bl2 = document.getElementById("btnLogout2");
+if(_bl2) _bl2.addEventListener("click", doLogout);
+document.getElementById("btnUsers").addEventListener("click", openUsersView);
+document.getElementById("btnUserBack").addEventListener("click", backFromUsers);
+document.getElementById("btnNewUser").addEventListener("click", ()=>openUserModal(null));
+document.getElementById("userModalClose").addEventListener("click", closeUserModal);
+document.getElementById("userModalCancel").addEventListener("click", closeUserModal);
+document.getElementById("userModalSave").addEventListener("click", saveUserModal);
+document.getElementById("userModal").addEventListener("click", e=>{ if(e.target.id === "userModal") closeUserModal(); });
+document.getElementById("uF_pwd").addEventListener("keydown", e=>{
+  if(e.key === "Enter"){ e.preventDefault(); saveUserModal(); }
+});
+
+/* ===== 启动：先问后端当前会话，再进应用 ===== */
+(async function boot(){
+  try{
+    const { user } = await api("me");
+    if(user){ currentUser = user; mountApp(); return; }
+    showLogin();
+  }catch(e){
+    // 后端不可达（如直接以 file:// 双击打开）：提示走服务端访问
+    showLogin();
+    const err = document.getElementById("loginErr");
+    if(err){ err.style.color = "var(--bad)";
+      err.textContent = "无法连接服务器，请通过部署后的网址访问（本地开发用 npm run dev）。"; }
+  }
+})();
 </script>
 
 </body>

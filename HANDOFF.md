@@ -222,14 +222,17 @@ git push          # 触发 Cloudflare 自动部署
 
 > 用户明确要求**一个阶段一个阶段地做**，每阶段做完先验证再继续，避免一次改动太大。
 
-### 阶段二：后端 + 多人协同（未开始）
-- Cloudflare D1（SQLite）数据库 + Cloudflare Pages Functions 作为后端 API
-- Cloudflare Access 邮箱白名单登录（用户届时提供白名单邮箱）
-- **按项目分配成员**
-- 冲突策略：**后写为准**（last-write-wins）
-- 首次登录时把本地 localStorage 数据**迁移到服务器**
-- 自动同步（带防抖 debounce）+ 同步状态指示器
-- 细粒度 PATCH 更新（不要每次全量覆盖）
+### 阶段二：后端 + 多人协同（进行中）
+
+> **鉴权方案变更**：原计划用 Cloudflare Access 邮箱白名单；现已改为**沿用第一阶段的自定义账号体系**（用户名+密码），搬到后端。Cloudflare Access 不再使用。
+
+按小步推进，每个子阶段做完先验证：
+
+- ✅ **2.1 鉴权与用户后端**（已完成并验证）：Cloudflare Pages Functions + D1；用户/会话表；登录/注销/会话/用户增删改查/重置密码 API；PBKDF2 密码哈希；首登种入 admin/adminyy；前端登录与用户管理改调后端。详见下方第 13 节。
+- ⬜ **2.2 项目/设备/自定义项后端 API + 按项目成员鉴权**（普通用户只见被分配的项目，admin 管全部并分配）
+- ⬜ **2.3 前端数据层切到 API**（localStorage 转离线缓存）+ 首登把本地数据迁移上云
+- ⬜ **2.4 自动同步（防抖 debounce）+ 同步状态指示器 + 后写为准（last-write-wins）+ 细粒度 PATCH**
+- ⬜ **2.5 admin 的项目成员分配 UI**
 
 ### 阶段三：操作日志 + 版本回滚（未开始）
 - 操作日志：记录**谁、何时、改了什么**；价格 / 公式改动要记录**改前改后**的值；用右侧抽屉展示
@@ -249,3 +252,52 @@ git push          # 触发 Cloudflare 自动部署
 5. 单价 / 公式覆盖是**按行索引**存的（`tf_prices`/`tf_formulas`），如果将来增删 `BOM` 项导致索引错位，需要做迁移映射。建议阶段二改成按稳定 id 存。
 6. 不要在代码或日志里明文打印任何 token；push 用 Keychain 凭证或临时 token。
 7. 进入阶段二前，本工具是纯前端、数据只在本地浏览器；任何「多人能看到同一份数据」的预期都要等后端做完才成立。
+
+---
+
+## 13. 阶段二后端（2.1 已落地）
+
+### 13.1 技术与结构
+- 后端 = **Cloudflare Pages Functions**（`functions/api/[[path]].js`，一个 catch-all 路由）+ **D1**（SQLite）。
+- 数据库 schema：`schema.sql`（幂等，可重复执行）。当前只有 `users` / `sessions` 两张表，2.2 会加项目/设备等表。
+- 配置：`wrangler.toml`（绑定名 **`DB`**）、`package.json`（dev 依赖 wrangler + 脚本）。
+- `node_modules/`、`.wrangler/`、`.dev.vars` 已在 `.gitignore`。
+
+### 13.2 鉴权设计
+- 密码：PBKDF2-SHA256（每用户随机 salt，10 万次迭代），存为 `pbkdf2$<iters>$<saltHex>$<hashHex>`。
+- 会话：登录在 `sessions` 表生成随机 token，写入 **HttpOnly cookie `tf_sid`**（30 天）；中间件按 cookie 取用户。
+- 首次访问（`users` 表为空）自动种入超级管理员 **admin / adminyy**。
+- `admin` 账号受保护：不可编辑、不可删除；任何人不能删自己。重置密码会注销该用户的其它会话。
+
+### 13.3 API 一览（均在 `/api` 下）
+| 方法 | 路径 | 权限 | 说明 |
+|---|---|---|---|
+| POST | /api/login | 公开 | `{username,password}` → 发会话 cookie |
+| POST | /api/logout | 公开 | 注销当前会话 |
+| GET | /api/me | 公开 | 当前用户（未登录 `user:null`） |
+| GET | /api/users | admin | 用户列表 |
+| POST | /api/users | admin | `{username,password,role}` 新建 |
+| PATCH | /api/users/:id | admin | `{username,role}` 编辑（admin 账号 403） |
+| DELETE | /api/users/:id | admin | 删除（admin / 自己 403） |
+| POST | /api/users/:id/reset | admin | `{password}` 重置密码 |
+
+前端通过 `api(path,{method,body})` 调用（`credentials:"include"`）；`boot()` 改为先问 `/api/me`。
+
+### 13.4 本地开发
+```bash
+npm install          # 装 wrangler
+npm run db:local     # 本地 D1 建表（首次）
+npm run dev          # http://localhost:8788
+```
+本地 D1 状态在 `.wrangler/`（已 gitignore）；`db:local` 与 `dev` 共享同一本地库。
+
+### 13.5 上线部署
+1. `npx wrangler login`
+2. `npx wrangler d1 create tension-fence-cost-db` → 把返回的 `database_id` 填进 `wrangler.toml`
+3. `npm run db:remote`（给线上 D1 建表）
+4. 部署二选一：
+   - **Git 自动部署（推荐，沿用现有方式）**：`git push` 后 Pages 会自动构建并带上 `functions/`。**必须**在 Pages 项目 → Settings → Functions → **D1 database bindings** 里加绑定：变量名 `DB`，库选 `tension-fence-cost-db`。
+   - **CLI 部署**：`npm run deploy`（`wrangler pages deploy .`）。
+5. 首次上线后访问网址，后端会自动种入 admin/adminyy。
+
+> ⚠️ 坑：Git 自动部署时，`wrangler.toml` 里的 `database_id` 只对 CLI 生效；**Dashboard 的 D1 绑定才是 Pages 构建用的**，别忘了配，否则 `/api/*` 会报「数据库未绑定」。
