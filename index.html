@@ -754,9 +754,9 @@ const BOM = [
   { sec:"一、探测器柱组件", type:"std", name:"探测器柱斜撑段", spec:"304不锈钢，135°斜撑段", unit:"件", formula:"pillarsPerZone * sets", price:159, note:"[昆山创思协尔]" },
   { sec:"一、探测器柱组件", type:"std", name:"上盖板", spec:"304不锈钢冲压件", unit:"件", formula:"pillarsPerZone * sets", price:122, note:"[昆山创思协尔]" },
   { sec:"一、探测器柱组件", type:"std", name:"下盖板", spec:"304不锈钢，含柱底固定结构", unit:"件", formula:"pillarsPerZone * sets", price:313.5, note:"[昆山创思协尔]" },
-  { sec:"一、探测器柱组件", type:"std", name:"触发器", spec:"按现场规格定制(沿用现役款)", unit:"个", formula:"pillarsPerZone * 2 * (zonesPerPillar - 1) * sets", price:10, note:"双防区2个/单防区0（单防区改用十字钢丝绳锁扣）" },
-  { sec:"一、探测器柱组件", type:"std", name:"触发器放大片", spec:"304钣金，触发器用", unit:"片", formula:"pillarsPerZone * 2 * (zonesPerPillar - 1) * sets", price:0.8, note:"每个触发器1片；双防区2/单防区0" },
-  { sec:"一、探测器柱组件", type:"std", name:"触发器放大片固定扣", spec:"放大片固定用", unit:"个", formula:"pillarsPerZone * 4 * (zonesPerPillar - 1) * sets", price:0.058, note:"每片2个；双防区4/单防区0" },
+  { sec:"一、探测器柱组件", type:"std", name:"触发器", spec:"按现场规格定制(沿用现役款)", unit:"个", formula:"totalLines * 2 * (zonesPerPillar - 1) * sets", price:10, note:"双防区每根张力刺丝2个(=2×总线数)；单防区0（改用十字钢丝绳锁扣）" },
+  { sec:"一、探测器柱组件", type:"std", name:"触发器放大片", spec:"304钣金，触发器用", unit:"片", formula:"totalLines * 2 * (zonesPerPillar - 1) * sets", price:0.8, note:"每个触发器1片(=2×总线数)；单防区0" },
+  { sec:"一、探测器柱组件", type:"std", name:"触发器放大片固定扣", spec:"放大片固定用", unit:"个", formula:"totalLines * 4 * (zonesPerPillar - 1) * sets", price:0.058, note:"每片2个(=4×总线数)；单防区0" },
   { sec:"一、探测器柱组件", type:"std", name:"拉力传感器", spec:"100Kg量程/万分之3精度，76.2×50.8×19mm", unit:"个", formula:"pillarsPerZone * zonesPerPillar * sets", price:90, note:"双防区2个/单防区1个" },
   { sec:"一、探测器柱组件", type:"std", name:"蜂鸣器", spec:"有源直流DC12V/22mm", unit:"个", formula:"pillarsPerZone * zonesPerPillar * sets", price:15.45, note:"双防区2个/单防区1个" },
   { sec:"一、探测器柱组件", type:"std", name:"钢丝绳锁扣(入侵报警)", spec:"适用1mm-1.5mm钢丝绳", unit:"个", formula:"pillarsPerZone * 2 * zonesPerPillar * sets", price:2.81, note:"双防区4个/单防区2个" },
@@ -836,7 +836,7 @@ const BOM = [
   { sec:"选-四、转角滑轮柱（变坡转角）", type:"opt", name:"滑轮柱支架衔接螺母", spec:"304 M6防松螺母", unit:"个", formula:"totalLines * 2 * sets", price:0.105, note:"" },
   { sec:"选-四、转角滑轮柱（变坡转角）", type:"opt", name:"滑轮柱支架衔接螺母垫片", spec:"304 M6螺母平垫", unit:"片", formula:"totalLines * 1 * sets", price:0.03, note:"" },
   /* 单防区专用：把探测器线与张力刺丝固定到一起（双防区为0）。追加在数组末尾以避免行索引位移影响单价/公式覆盖 */
-  { sec:"一、探测器柱组件", type:"std", name:"十字钢丝绳锁扣", spec:"探测器线与张力刺丝十字固定", unit:"个", formula:"pillarsPerZone * (2 - zonesPerPillar) * sets", price:0, note:"单防区每套1个；双防区0（请填单价）" },
+  { sec:"一、探测器柱组件", type:"std", name:"十字钢丝绳锁扣", spec:"探测器线与张力刺丝十字固定", unit:"个", formula:"totalLines * (2 - zonesPerPillar) * sets", price:0, note:"单防区每根张力刺丝1个(=1×总线数)；双防区0（请填单价）" },
 ];
 const DEFAULT_PRICES   = BOM.map(it=>it.price);
 const DEFAULT_FORMULAS = BOM.map(it=>it.formula);
