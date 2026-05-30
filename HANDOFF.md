@@ -346,3 +346,35 @@ npm run dev          # http://localhost:8788
 
 ### 14.5 阶段一旧坑的现状
 - 「单价/公式按行索引存」的隐患仍在（`prices`/`formulas` 仍以 BOM 行索引为 key，存进全局 `settings`）。增删 `BOM` 项仍需迁移映射。
+
+---
+
+## 15. 模板功能（张力围栏配置预设）
+
+> 需求：同一类张力围栏有 5+ 种配置；每台设备选一个模板套用参数。**只做张力围栏**，其它设备成本暂用「自定义子项」顶替。
+
+### 15.1 设计取舍
+- **模板 = `{id, name, mode, params}`**：一套规格参数 + 单/双防区。`params` 为 17 个 `DEFAULT_PARAMS` 键的取值。
+- **单价 / 公式 / 自定义子项仍全局共享**（`settings.prices/formulas` 与 `customItems`）——同类产品采购价与算法一致。这样**汇总/计价不变**，避免「不同模板的设备在汇总里混算单价」的复杂度。
+- 模板**全局共享**：存在 `settings.templates`（JSON 数组），不按项目隔离。
+- 设备的单/双防区由**模板的 mode** 决定；`equipment.mode` 字段保留但只作旧数据/离线兜底，计算一律走模板。
+
+### 15.2 数据
+- 后端：`equipment` 新增 **`template_id`** 列（线上用 `ALTER TABLE equipment ADD COLUMN template_id TEXT` 加过一次）；`schema.sql` 的 equipment 定义已含该列（新库自动有）。
+- 模板存 `settings` 表 key=`templates`；`GET /api/settings`、`/api/bootstrap` 都返回 `templates`；`PUT /api/settings/templates` 写入；`settings` 白名单已加 `templates`。
+- equipment 的 POST/PATCH 接受并返回 `templateId`/`template_id`；快照 `captureProject`、回滚 insert 都带 `template_id`。
+
+### 15.3 前端关键点（`index.html`）
+- 全局 `templates`（来自 `settings.templates`，空则 `seedTemplatesIfEmpty()` 种「双防区/单防区」）。
+- `migrateEquipTemplates()`：给没有 `templateId` 的老设备按 `mode` 指到对应模板。
+- 取数助手：`tplOf(equip)`、`paramsOf(equip)`（模板参数补默认）、`activeTemplate()`、`zonesPerPillarOf` 用模板 mode。
+- **计算改用 `paramsOf(equip)`**：`derivedFor`、`buildScope`、以及所有 `zonePoles(z, params.mainSpacing)` 处（`renderActiveZones`/`renderSummary`/`exportCSV`）。
+- 左侧参数面板（`renderParams`）编辑的是**当前选中设备所用模板**的 `params`（顶部「当前模板」横幅），不再是全局 `params`。
+- 设备行的单/双下拉换成**模板下拉**（`data-ef="template"`）。
+- 模板管理弹窗 `#tplModal`：`openTemplateManager/renderTemplateManager`（改名/改单双/复制新建/删除；在用禁删）。
+- 同步：`snapshotNow/serverToClient/applyServerData/diffToCalls/cacheToLocal` 均已纳入 `settings.templates` 与 `equipment.templateId`（`tf_templates` 也写入 localStorage 缓存）。
+
+### 15.4 坑
+- 模板里**只有参数**；改单价/公式仍是全局，会影响所有模板/设备（与阶段一一致）。
+- 删模板前确保无设备在用（UI 已禁用；后端未强校验，前端控制）。
+- 升级到「每模板独立 BOM（公式/单价/物料各自不同）」需要：模板内嵌物料项数组 + 汇总改为按设备各自模板求和计价 + 汇总视图单价列只读。属较大改动，按需再做。
