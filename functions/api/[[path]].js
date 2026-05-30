@@ -134,7 +134,7 @@ async function logIt(db, me, action, opts = {}) {
 /* ---------- 项目快照：抓取当前项目的全部数据 ---------- */
 async function captureProject(db, pid) {
   const project = await db.prepare("SELECT id, name, customer, description FROM projects WHERE id = ?").bind(pid).first();
-  const equipment = (await db.prepare("SELECT id, name, sets, mode, zones, pos FROM equipment WHERE project_id = ? ORDER BY pos ASC").bind(pid).all()).results;
+  const equipment = (await db.prepare("SELECT id, name, sets, mode, template_id, zones, pos FROM equipment WHERE project_id = ? ORDER BY pos ASC").bind(pid).all()).results;
   const custom = (await db.prepare("SELECT id, sec, name, spec, unit, qty, qty_formula, price, note, pos FROM custom_items WHERE project_id = ? ORDER BY pos ASC").bind(pid).all()).results;
   return { project, equipment, custom };
 }
@@ -282,7 +282,7 @@ export async function onRequest(context) {
     }
     equipment.forEach(e => { try { e.zones = JSON.parse(e.zones); } catch (x) { e.zones = []; } });
     const srows = (await db.prepare("SELECT k, v FROM settings").all()).results;
-    const settings = { params: {}, prices: {}, formulas: {}, cparams: [] };
+    const settings = { params: {}, prices: {}, formulas: {}, cparams: [], templates: [] };
     for (const r of srows) { try { settings[r.k] = JSON.parse(r.v); } catch (x) {} }
     return json({ projects, equipment, custom, settings });
   }
@@ -307,13 +307,13 @@ export async function onRequest(context) {
   if (segs[0] === "settings") {
     if (segs.length === 1 && method === "GET") {
       const { results } = await db.prepare("SELECT k, v FROM settings").all();
-      const out = { params: {}, prices: {}, formulas: {}, cparams: [] };
+      const out = { params: {}, prices: {}, formulas: {}, cparams: [], templates: [] };
       for (const row of results) { try { out[row.k] = JSON.parse(row.v); } catch (e) {} }
       return json(out);
     }
     if (segs.length === 2 && method === "PUT") {
       const key = segs[1];
-      if (!["params", "prices", "formulas", "cparams"].includes(key)) return bad("未知设置键");
+      if (!["params", "prices", "formulas", "cparams", "templates"].includes(key)) return bad("未知设置键");
       const value = await readJson(request);           // 请求体即为要保存的值（对象或数组）
       const oldRow = await db.prepare("SELECT v FROM settings WHERE k = ?").bind(key).first();
       let oldVal; try { oldVal = oldRow ? JSON.parse(oldRow.v) : undefined; } catch (e) { oldVal = undefined; }
@@ -430,8 +430,8 @@ export async function onRequest(context) {
             db.prepare("DELETE FROM custom_items WHERE project_id = ?").bind(pid),
           ];
           (data.equipment || []).forEach(e => stmts.push(
-            db.prepare("INSERT INTO equipment (id, project_id, name, sets, mode, zones, pos, updated_at) VALUES (?,?,?,?,?,?,?,?)")
-              .bind(e.id, pid, e.name, e.sets, e.mode, typeof e.zones === "string" ? e.zones : JSON.stringify(e.zones || []), e.pos || 0, now)));
+            db.prepare("INSERT INTO equipment (id, project_id, name, sets, mode, template_id, zones, pos, updated_at) VALUES (?,?,?,?,?,?,?,?,?)")
+              .bind(e.id, pid, e.name, e.sets, e.mode, e.template_id || null, typeof e.zones === "string" ? e.zones : JSON.stringify(e.zones || []), e.pos || 0, now)));
           (data.custom || []).forEach(c => stmts.push(
             db.prepare("INSERT INTO custom_items (id, project_id, sec, name, spec, unit, qty, qty_formula, price, note, pos, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
               .bind(c.id, pid, c.sec, c.name, c.spec, c.unit, c.qty, c.qty_formula || null, c.price, c.note, c.pos || 0, now)));
@@ -457,12 +457,12 @@ export async function onRequest(context) {
           const id = (typeof body.id === "string" && body.id) ? body.id : crypto.randomUUID();
           const zones = Array.isArray(body.zones) ? body.zones : [];
           const now = Date.now();
-          await db.prepare("INSERT INTO equipment (id, project_id, name, sets, mode, zones, pos, updated_at) VALUES (?,?,?,?,?,?,?,?)")
+          await db.prepare("INSERT INTO equipment (id, project_id, name, sets, mode, template_id, zones, pos, updated_at) VALUES (?,?,?,?,?,?,?,?,?)")
             .bind(id, pid, (body.name || "设备"), (+body.sets || 1),
-                  body.mode === "single" ? "single" : "double", JSON.stringify(zones),
+                  body.mode === "single" ? "single" : "double", (body.templateId || null), JSON.stringify(zones),
                   (+body.pos || 0), now).run();
           await logIt(db, me, "新增设备", { projectId: pid, target: body.name || "设备" });
-          return json({ equipment: { id, project_id: pid, name: body.name || "设备", sets: +body.sets || 1, mode: body.mode === "single" ? "single" : "double", zones, pos: +body.pos || 0, updated_at: now } });
+          return json({ equipment: { id, project_id: pid } });
         }
       }
 
@@ -529,8 +529,9 @@ export async function onRequest(context) {
       const mode = body.mode !== undefined ? (body.mode === "single" ? "single" : "double") : cur.mode;
       const zones = body.zones !== undefined ? JSON.stringify(Array.isArray(body.zones) ? body.zones : []) : cur.zones;
       const pos = body.pos !== undefined ? (+body.pos || 0) : cur.pos;
-      await db.prepare("UPDATE equipment SET name = ?, sets = ?, mode = ?, zones = ?, pos = ?, updated_at = ? WHERE id = ?")
-        .bind(name, sets, mode, zones, pos, Date.now(), eid).run();
+      const templateId = body.templateId !== undefined ? (body.templateId || null) : cur.template_id;
+      await db.prepare("UPDATE equipment SET name = ?, sets = ?, mode = ?, template_id = ?, zones = ?, pos = ?, updated_at = ? WHERE id = ?")
+        .bind(name, sets, mode, templateId, zones, pos, Date.now(), eid).run();
       await logIt(db, me, "修改设备", { projectId: projId, target: name });
       return json({ ok: true });
     }

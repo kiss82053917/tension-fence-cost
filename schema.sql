@@ -43,14 +43,15 @@ CREATE TABLE IF NOT EXISTS project_members (
 
 -- 设备（隶属项目）
 CREATE TABLE IF NOT EXISTS equipment (
-  id         TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL,
-  name       TEXT NOT NULL DEFAULT '设备',
-  sets       INTEGER NOT NULL DEFAULT 1,
-  mode       TEXT NOT NULL DEFAULT 'double',  -- 'double' | 'single'
-  zones      TEXT NOT NULL DEFAULT '[]',      -- JSON: [{name,length}]
-  pos        INTEGER NOT NULL DEFAULT 0,       -- 列表排序
-  updated_at INTEGER NOT NULL
+  id          TEXT PRIMARY KEY,
+  project_id  TEXT NOT NULL,
+  name        TEXT NOT NULL DEFAULT '设备',
+  sets        INTEGER NOT NULL DEFAULT 1,
+  mode        TEXT NOT NULL DEFAULT 'double',  -- 'double' | 'single'（旧字段，模板上线后由模板决定）
+  template_id TEXT,                            -- 所用模板 id（模板存于 settings.templates）
+  zones       TEXT NOT NULL DEFAULT '[]',      -- JSON: [{name,length}]
+  pos         INTEGER NOT NULL DEFAULT 0,       -- 列表排序
+  updated_at  INTEGER NOT NULL
 );
 
 -- 自定义子项（隶属项目）

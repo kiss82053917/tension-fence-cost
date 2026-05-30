@@ -225,6 +225,19 @@
     transition:opacity .3s}
   .toast.hidden{opacity:0;pointer-events:none}
   .toast.ok{background:var(--ok)} .toast.warn{background:var(--warn)}
+  /* 模板 */
+  .tpl-banner{background:#eef2ff;border:1px solid #c7d2fe;border-radius:6px;padding:8px 10px;
+    margin:8px 0 6px;font-size:12.5px;color:var(--brand-2);position:relative}
+  .tpl-banner b{font-size:13px}
+  .tpl-banner .tpl-note{color:var(--muted);font-weight:400;font-size:11px;margin-top:3px;line-height:1.5}
+  .tpl-mng{position:absolute;top:8px;right:10px;border:1px solid var(--brand);background:#fff;color:var(--brand);
+    border-radius:5px;padding:2px 9px;font-size:11px;cursor:pointer}
+  .tpl-mng:hover{background:var(--soft)}
+  .tpl-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f2f7}
+  .tpl-row:last-child{border-bottom:none}
+  .tpl-row .tpl-name{flex:1;min-width:0;padding:5px 8px;border:1px solid var(--line);border-radius:5px;font-size:13px}
+  .tpl-row .tpl-mode{padding:5px;border:1px solid var(--line);border-radius:5px;font-size:12px;background:#fff}
+  .tpl-row .tpl-used{font-size:11px;color:var(--muted);white-space:nowrap}
   .fx-actions{padding:12px 18px;border-top:1px solid var(--line);display:flex;align-items:center;gap:8px}
   .fx-actions button{padding:6px 14px;border:1px solid var(--line);background:#fff;border-radius:6px;
     cursor:pointer;font-size:13px}
@@ -578,6 +591,28 @@
   </div>
 </div>
 
+<!-- 模板管理 -->
+<div id="tplModal" class="modal hidden">
+  <div class="modal-card" style="max-width:560px">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title">🧩 模板管理</div>
+        <div class="modal-sub">模板 = 一套规格参数 + 单/双防区。参数值在左侧面板里改（先选一台用该模板的设备）。</div>
+      </div>
+      <button class="x-btn" id="tplClose">×</button>
+    </div>
+    <div class="modal-body">
+      <div id="tplList"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;align-items:center">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap">复制自</span>
+        <select id="tplCopyFrom" style="flex:1;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px"></select>
+        <button id="tplNew" class="act primary">＋ 新建模板</button>
+      </div>
+    </div>
+    <div class="fx-actions"><span style="flex:1"></span><button id="tplDone" class="primary">完成</button></div>
+  </div>
+</div>
+
 <!-- 操作日志抽屉 -->
 <div id="logDrawer" class="drawer hidden">
   <div class="drawer-head">
@@ -701,10 +736,14 @@ const DEFAULT_ZONES = [
   {name:"右防区", length:40},
 ];
 function defaultEquipment(idx){
-  return { id: uid(), name: `设备 ${idx||1}`, sets: 1, mode: "double",
+  const tid = (typeof templates !== "undefined" && templates && templates[0]) ? templates[0].id : null;
+  const mode = (tid && templateById(tid)) ? templateById(tid).mode : "double";
+  return { id: uid(), name: `设备 ${idx||1}`, sets: 1, mode, templateId: tid,
            zones: DEFAULT_ZONES.map(z=>({...z})) };
 }
-function zonesPerPillarOf(equip){ return equip && equip.mode === "single" ? 1 : 2; }
+function zonesPerPillarOf(equip){ const t = (typeof tplOf==="function") ? tplOf(equip) : null;
+  const mode = t ? t.mode : (equip && equip.mode);
+  return mode === "single" ? 1 : 2; }
 
 /* =========================================================
  *  BOM 数据（formula = 可编辑的数量公式字符串）
@@ -863,6 +902,43 @@ let equipmentList    = loadEquipmentList();
 let activeEquipId    = lsGet("tf_active", null) || equipmentList[0].id;
 let viewMode         = lsGet("tf_view", "aggregate"); // "aggregate" | "single"
 
+/* =========================================================
+ *  模板（张力围栏配置预设）：一套「规格参数 + 单/双防区」
+ *  模板全局共享（存 settings.templates）；单价/公式/自定义子项仍全局。
+ *  每台设备用 templateId 选模板；设备的 mode 由模板决定。
+ * ========================================================= */
+function defaultParamSet(){ const o={}; for(const k in DEFAULT_PARAMS) o[k]=DEFAULT_PARAMS[k].v; return o; }
+let templates = (function(){
+  const a = lsGet("tf_templates", null);
+  return Array.isArray(a) && a.length ? a : null;
+})();
+/* 首次：用当前（已加载的）参数种入「双防区/单防区」两个模板 */
+function seedTemplatesIfEmpty(){
+  if(templates && templates.length) return;
+  const base = {...defaultParamSet(), ...params};   // 沿用已有参数作为初值
+  templates = [
+    { id:"tpl_double", name:"双防区", mode:"double", params:{...base} },
+    { id:"tpl_single", name:"单防区", mode:"single", params:{...base} },
+  ];
+}
+seedTemplatesIfEmpty();
+function templateById(id){ return templates.find(t=>t.id===id); }
+function defaultTemplateId(){ return (templates[0]||{}).id; }
+/* 给没有 templateId 的设备按 mode 迁移到对应模板 */
+function migrateEquipTemplates(){
+  const dbl = (templates.find(t=>t.mode==="double")||templates[0]||{}).id;
+  const sgl = (templates.find(t=>t.mode==="single")||templates[0]||{}).id;
+  equipmentList.forEach(e=>{
+    if(!e.templateId || !templateById(e.templateId))
+      e.templateId = (e.mode==="single") ? sgl : dbl;
+  });
+}
+migrateEquipTemplates();
+function tplOf(equip){ return (equip && templateById(equip.templateId)) || templates[0]; }
+function activeTemplate(){ return tplOf(activeEquip()); }
+/* 设备的有效参数 = 其模板参数（缺省补默认） */
+function paramsOf(equip){ const t = tplOf(equip); return {...defaultParamSet(), ...(t && t.params || {})}; }
+
 /* ===== 项目层（阶段一） ===== */
 function defaultProject(idx){
   const t = Date.now();
@@ -902,6 +978,7 @@ function cacheToLocal(){
   lsSet("tf_formulas", formulaOverrides);
   lsSet("tf_custom", customItems);
   lsSet("tf_cparams", customParams);
+  lsSet("tf_templates", templates);
   lsSet("tf_equip", equipmentList);
   lsSet("tf_active", activeEquipId);
   lsSet("tf_view", viewMode);
@@ -957,18 +1034,19 @@ function zonePoles(z, spacing){
   return Math.max(0, Math.ceil((+z.length||0)/(+spacing||1))-1);
 }
 function derivedFor(equip){
+  const tp = paramsOf(equip);
   const sets = +equip.sets || 1;
   const totalZoneLen = equip.zones.reduce((a,z)=>a + (+z.length||0), 0);
   const totalLen   = totalZoneLen * sets;
-  const totalLines = (+params.vertLines||0) + (+params.slopeLines||0);
-  const mainPoles  = equip.zones.reduce((a,z)=>a + zonePoles(z, params.mainSpacing), 0);
+  const totalLines = (+tp.vertLines||0) + (+tp.slopeLines||0);
+  const mainPoles  = equip.zones.reduce((a,z)=>a + zonePoles(z, tp.mainSpacing), 0);
   const zonesPerPillar = zonesPerPillarOf(equip);
   return { totalLen, totalLines, mainPoles, totalZoneLen,
            zoneCount: equip.zones.length, sets, zonesPerPillar };
 }
 function buildScope(equip){
   const d = derivedFor(equip);
-  const s = {...params, ...d};
+  const s = {...paramsOf(equip), ...d};
   s.leftLen  = +equip.zones[0]?.length || 0;
   s.rightLen = +equip.zones[1]?.length || 0;
   equip.zones.forEach((z, i)=>{ s["zoneLen"+(i+1)] = +z.length||0; });
@@ -1073,9 +1151,8 @@ function renderEquipmentList(){
       </div>
       <div class="e-meta">
         <span>${e.zones.length} 防区 · ${round2(tz)} m</span>
-        <select class="e-mode" data-ef="mode" title="单防区 = 1传感器/1控制器/1防雷；双防区 = 2套">
-          <option value="double" ${e.mode!=="single"?"selected":""}>双防区</option>
-          <option value="single" ${e.mode==="single"?"selected":""}>单防区</option>
+        <select class="e-mode" data-ef="template" title="选择此设备使用的模板（决定参数与单/双防区）">
+          ${templates.map(t=>`<option value="${escAttr(t.id)}" ${tplOf(e).id===t.id?"selected":""}>${esc(t.name)}</option>`).join("")}
         </select>
         <span class="sets">套数 <input data-ef="sets" type="number" step="1" min="1" value="${e.sets}"></span>
       </div>
@@ -1104,7 +1181,7 @@ function renderActiveZones(){
     </div>`;
   });
   html += `<div class="add-line" id="addZone">+ 在该设备下添加防区</div>`;
-  const sp = +params.mainSpacing || 1;
+  const sp = +paramsOf(e).mainSpacing || 1;
   let rows = "";
   e.zones.forEach((z, i)=>{
     rows += `<tr><td class="zk">${esc(z.name||("防区"+(i+1)))} <code>zoneLen${i+1}</code></td>
@@ -1123,6 +1200,8 @@ function renderActiveZones(){
 
 function renderParams(){
   const root = document.getElementById("params");
+  const at = activeTemplate();
+  const tp = paramsOf(activeEquip());
 
   const builtinByG = {};
   for(const k in DEFAULT_PARAMS){
@@ -1137,6 +1216,11 @@ function renderParams(){
 
   let html = "";
   for(const g of Object.keys(GROUPS)){
+    if(g === "main"){
+      html += `<div class="tpl-banner">当前模板：<b>${esc(at.name)}</b> · ${at.mode==="single"?"单防区":"双防区"}
+        <button class="tpl-mng" id="btnTplManage">管理模板</button>
+        <div class="tpl-note">下面的规格参数属于此模板，改动会影响所有使用「${esc(at.name)}」的设备。</div></div>`;
+    }
     html += `<h2>${GROUPS[g]}</h2>`;
     if(g === "equip"){
       html += renderEquipmentList();
@@ -1147,7 +1231,7 @@ function renderParams(){
       for(const f of builtinByG[g]){
         html += `<div class="field" title="变量名：${f.key}">
           <label><code>${f.key}</code>${esc(f.label)}<span class="unit">${esc(f.u)}</span></label>
-          <input type="number" step="any" data-k="${f.key}" value="${params[f.key]}"></div>`;
+          <input type="number" step="any" data-k="${f.key}" value="${tp[f.key]}"></div>`;
       }
     }
     if(customByG[g] && customByG[g].length){
@@ -1184,16 +1268,20 @@ function renderParams(){
 
   root.innerHTML = html;
 
-  /* 绑定：内置参数 */
+  /* 绑定：内置参数（写入当前设备所用模板） */
   root.querySelectorAll("input[data-k]").forEach(el=>{
     el.addEventListener("input", ()=>{
       const v = parseFloat(el.value);
       if(!Number.isFinite(v)){ el.style.borderColor="var(--bad)"; return; }
       el.style.borderColor = "";
-      params[el.dataset.k] = v;
+      const t = activeTemplate();
+      if(!t.params) t.params = {};
+      t.params[el.dataset.k] = v;
       saveAll(); rerender();
     });
   });
+  const tplMng = document.getElementById("btnTplManage");
+  if(tplMng) tplMng.addEventListener("click", openTemplateManager);
   /* 自定义参数 */
   root.querySelectorAll("[data-cpi]").forEach(row=>{
     const i = +row.dataset.cpi;
@@ -1252,6 +1340,10 @@ function renderParams(){
           e.sets = v;
         }else if(f === "mode"){
           e.mode = el.value === "single" ? "single" : "double";
+        }else if(f === "template"){
+          e.templateId = el.value;
+          const t = templateById(e.templateId);
+          if(t) e.mode = t.mode;   // 旧字段同步，便于离线/老逻辑
         }else if(f === "name"){
           e.name = el.value;
         }
@@ -1850,7 +1942,7 @@ function renderSummary(){
       return a + tz * (+e.sets||1);
     }, 0);
     const mainPoles = projEquips.reduce((a,e)=>{
-      const pp = e.zones.reduce((b,z)=>b+zonePoles(z, params.mainSpacing), 0);
+      const pp = e.zones.reduce((b,z)=>b+zonePoles(z, paramsOf(e).mainSpacing), 0);
       return a + pp * (+e.sets||1);
     }, 0);
     document.getElementById("kTotalLen").textContent  = round2(totalLen);
@@ -2070,7 +2162,7 @@ function exportCSV(){
   lines.push(["设备","防区序号","防区名称","长度(m)","主螺旋柱(根)"]);
   projEquips.forEach(e=>{
     e.zones.forEach((z, j)=>{
-      lines.push([e.name, j+1, z.name, +z.length||0, zonePoles(z, params.mainSpacing)]);
+      lines.push([e.name, j+1, z.name, +z.length||0, zonePoles(z, paramsOf(e).mainSpacing)]);
     });
   });
 
@@ -2582,6 +2674,53 @@ document.getElementById("snapSave").addEventListener("click", doSnapshot);
 document.getElementById("snapModal").addEventListener("click", e=>{ if(e.target.id==="snapModal") closeSnapModal(); });
 
 /* =========================================================
+ *  模板管理（张力围栏配置预设）
+ * ========================================================= */
+function tplUsedCount(id){ return equipmentList.filter(e=>e.templateId===id).length; }
+function openTemplateManager(){ document.getElementById("tplModal").classList.remove("hidden"); renderTemplateManager(); }
+function closeTemplateManager(){ document.getElementById("tplModal").classList.add("hidden"); }
+function renderTemplateManager(){
+  const box = document.getElementById("tplList");
+  box.innerHTML = templates.map(t=>{
+    const used = tplUsedCount(t.id);
+    const canDel = used===0 && templates.length>1;
+    return `<div class="tpl-row" data-tid="${escAttr(t.id)}">
+      <input class="tpl-name" value="${escAttr(t.name)}" placeholder="模板名" maxlength="30">
+      <select class="tpl-mode"><option value="double" ${t.mode!=="single"?"selected":""}>双防区</option><option value="single" ${t.mode==="single"?"selected":""}>单防区</option></select>
+      <span class="tpl-used">${used} 台在用</span>
+      <button class="u-op danger tpl-del" ${canDel?"":`disabled title="${used>0?'有设备在用，不能删':'至少保留1个模板'}"`}>删除</button>
+    </div>`;
+  }).join("");
+  document.getElementById("tplCopyFrom").innerHTML = templates.map(t=>`<option value="${escAttr(t.id)}">${esc(t.name)}</option>`).join("");
+  box.querySelectorAll(".tpl-row").forEach(row=>{
+    const tid = row.dataset.tid, t = templateById(tid);
+    row.querySelector(".tpl-name").addEventListener("change", e=>{ t.name = e.target.value.trim()||t.name; saveAll(); renderParams(); renderTemplateManager(); });
+    row.querySelector(".tpl-mode").addEventListener("change", e=>{
+      t.mode = e.target.value==="single"?"single":"double";
+      equipmentList.forEach(eq=>{ if(eq.templateId===tid) eq.mode=t.mode; });
+      saveAll(); rerender(); renderParams(); renderTemplateManager();
+    });
+    const del = row.querySelector(".tpl-del");
+    if(del && !del.disabled) del.addEventListener("click", ()=>{
+      if(!confirm(`删除模板「${t.name}」？`)) return;
+      templates = templates.filter(x=>x.id!==tid);
+      saveAll(); renderTemplateManager(); rerender(); renderParams();
+    });
+  });
+}
+document.getElementById("tplNew").addEventListener("click", ()=>{
+  const src = templateById(document.getElementById("tplCopyFrom").value) || templates[0];
+  const id = "tpl_"+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+  let name = (src.name||"模板")+" 副本", n=2;
+  while(templates.some(t=>t.name===name)){ name = (src.name||"模板")+" 副本"+(n++); }
+  templates.push({ id, name, mode: src.mode, params: {...(src.params||{})} });
+  saveAll(); renderTemplateManager(); renderParams();
+});
+document.getElementById("tplClose").addEventListener("click", closeTemplateManager);
+document.getElementById("tplDone").addEventListener("click", closeTemplateManager);
+document.getElementById("tplModal").addEventListener("click", e=>{ if(e.target.id==="tplModal") closeTemplateManager(); });
+
+/* =========================================================
  *  同步层（阶段 2.3 / 2.4）
  *  - bootstrapData：登录后从后端拉全量；服务端空+本地有数据则首登迁移
  *  - saveAll() = cacheToLocal() + scheduleSync()（防抖）
@@ -2605,7 +2744,7 @@ function serverToClient(data){
     projects: (data.projects||[]).map(p=>({ id:p.id, name:p.name, customer:p.customer||"",
       description:p.description||"", createdAt:p.created_at, updatedAt:p.updated_at })),
     equipment: (data.equipment||[]).map(e=>({ id:e.id, projectId:e.project_id, name:e.name,
-      sets:+e.sets||1, mode:e.mode==="single"?"single":"double",
+      sets:+e.sets||1, mode:e.mode==="single"?"single":"double", templateId:e.template_id||null,
       zones: Array.isArray(e.zones)? e.zones.map(z=>({name:String(z.name||""),length:+z.length||0})) : [] })),
     custom: (data.custom||[]).map(c=>({ id:c.id, projectId:c.project_id, sec:c.sec||"其他自定义",
       name:c.name||"", spec:c.spec||"", unit:c.unit||"个", qty:+c.qty||0,
@@ -2615,6 +2754,7 @@ function serverToClient(data){
       prices: (data.settings&&data.settings.prices)||{},
       formulas: (data.settings&&data.settings.formulas)||{},
       cparams: (data.settings&&data.settings.cparams)||[],
+      templates: (data.settings&&data.settings.templates)||[],
     },
   };
 }
@@ -2622,15 +2762,19 @@ function serverToClient(data){
 function snapshotNow(){
   return {
     projects: projectList.map(p=>({id:p.id,name:p.name,customer:p.customer||"",description:p.description||"",createdAt:p.createdAt,updatedAt:p.updatedAt})),
-    equipment: equipmentList.map(e=>({id:e.id,projectId:e.projectId,name:e.name,sets:+e.sets||1,mode:e.mode,zones:(e.zones||[]).map(z=>({name:z.name,length:+z.length||0}))})),
+    equipment: equipmentList.map(e=>({id:e.id,projectId:e.projectId,name:e.name,sets:+e.sets||1,mode:e.mode,templateId:e.templateId||null,zones:(e.zones||[]).map(z=>({name:z.name,length:+z.length||0}))})),
     custom: customItems.map(c=>({id:c.id,projectId:c.projectId,sec:c.sec,name:c.name,spec:c.spec,unit:c.unit,qty:+c.qty||0,qtyFormula:c.qtyFormula||undefined,price:+c.price||0,note:c.note})),
-    settings: { params:{...params}, prices:{...priceOverrides}, formulas:{...formulaOverrides}, cparams:customParams.map(c=>({...c})) },
+    settings: { params:{...params}, prices:{...priceOverrides}, formulas:{...formulaOverrides}, cparams:customParams.map(c=>({...c})),
+      templates: templates.map(t=>({...t, params:{...t.params}})) },
   };
 }
 function applyServerData(c){
   projectList = c.projects; equipmentList = c.equipment; customItems = c.custom;
   params = c.settings.params; priceOverrides = c.settings.prices;
   formulaOverrides = c.settings.formulas; customParams = c.settings.cparams;
+  if(Array.isArray(c.settings.templates) && c.settings.templates.length) templates = c.settings.templates;
+  seedTemplatesIfEmpty();
+  migrateEquipTemplates();
 }
 function fixActiveRefs(){
   if(!projectList.some(p=>p.id===activeProjectId)) activeProjectId = projectList[0] ? projectList[0].id : null;
@@ -2701,9 +2845,9 @@ function diffToCalls(prev, cur){
   const isDelPrj = id => deletedProjects.includes(id);
 
   for(const e of cur.equipment){ const o=ePrev[e.id], pos=ePosCur[e.id];
-    if(!o) calls.push({method:"POST", path:"projects/"+e.projectId+"/equipment", body:{id:e.id,name:e.name,sets:e.sets,mode:e.mode,zones:e.zones,pos}});
-    else if(o.name!==e.name||o.sets!==e.sets||o.mode!==e.mode||changed(o.zones,e.zones)||ePosPrev[e.id]!==pos)
-      calls.push({method:"PATCH", path:"equipment/"+e.id, body:{name:e.name,sets:e.sets,mode:e.mode,zones:e.zones,pos}}); }
+    if(!o) calls.push({method:"POST", path:"projects/"+e.projectId+"/equipment", body:{id:e.id,name:e.name,sets:e.sets,mode:e.mode,templateId:e.templateId||null,zones:e.zones,pos}});
+    else if(o.name!==e.name||o.sets!==e.sets||o.mode!==e.mode||(o.templateId||null)!==(e.templateId||null)||changed(o.zones,e.zones)||ePosPrev[e.id]!==pos)
+      calls.push({method:"PATCH", path:"equipment/"+e.id, body:{name:e.name,sets:e.sets,mode:e.mode,templateId:e.templateId||null,zones:e.zones,pos}}); }
   for(const c of cur.custom){ const o=cPrev[c.id], pos=cPosCur[c.id];
     if(!o) calls.push({method:"POST", path:"projects/"+c.projectId+"/custom", body:{id:c.id,sec:c.sec,name:c.name,spec:c.spec,unit:c.unit,qty:c.qty,qtyFormula:c.qtyFormula||null,price:c.price,note:c.note,pos}});
     else if(o.sec!==c.sec||o.name!==c.name||o.spec!==c.spec||o.unit!==c.unit||o.qty!==c.qty||(o.qtyFormula||"")!==(c.qtyFormula||"")||o.price!==c.price||o.note!==c.note||cPosPrev[c.id]!==pos)
@@ -2713,7 +2857,7 @@ function diffToCalls(prev, cur){
   for(const c of prev.custom){ if(!cCur[c.id] && !isDelPrj(c.projectId)) calls.push({method:"DELETE", path:"custom/"+c.id}); }
   for(const id of deletedProjects) calls.push({method:"DELETE", path:"projects/"+id});
 
-  for(const k of ["params","prices","formulas","cparams"]){
+  for(const k of ["params","prices","formulas","cparams","templates"]){
     if(changed(prev.settings[k], cur.settings[k])) calls.push({method:"PUT", path:"settings/"+k, body:cur.settings[k]});
   }
   return calls;
