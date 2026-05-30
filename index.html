@@ -141,6 +141,22 @@
   td.mat-cell{width:74px}
   td .mat-sel{width:100%;padding:3px 4px;border:1px solid var(--line);border-radius:4px;font-size:12px;background:#f0f7ff;color:var(--brand-2)}
   td .mat-sel:focus{outline:none;border-color:var(--brand)}
+  td.name-cell{min-width:120px}
+  td .name-in{width:100%;font-weight:500;color:var(--ink);background:#f7fbff}
+  td.unit{width:54px}
+  td .unit-in{width:100%;text-align:center;background:#f7fbff;color:var(--muted);padding:3px 2px}
+  section.bom table{min-width:760px}
+  /* 左侧参数：名称+单位可编辑 */
+  .field.pfield{grid-template-columns:1fr 58px 40px;gap:4px}
+  .plabel-wrap{display:flex;align-items:center;gap:3px;min-width:0;overflow:hidden}
+  .plabel{flex:1;min-width:0;border:1px solid transparent;background:transparent;font-size:12.5px;
+    padding:2px 3px;border-radius:3px;color:var(--ink)}
+  .plabel:hover{background:#fff;border-color:var(--line)}
+  .plabel:focus{outline:none;background:#fff;border-color:var(--brand)}
+  .punit{border:1px solid transparent;background:transparent;font-size:11.5px;color:var(--muted);
+    padding:2px;text-align:center;border-radius:3px;width:100%}
+  .punit:hover{background:#fff;border-color:var(--line)}
+  .punit:focus{outline:none;background:#fff;border-color:var(--brand)}
   td .price-in{width:100%;padding:3px 5px;border:1px solid var(--line);border-radius:4px;
     text-align:right;font-variant-numeric:tabular-nums;background:var(--yellow);font-size:12.5px}
   td .price-in:focus{outline:none;border-color:var(--brand);background:#fffef2}
@@ -904,6 +920,12 @@ let params           = loadParams();
 let priceOverrides   = lsGet("tf_prices", {}) || {};
 let specOverrides    = lsGet("tf_specs", {}) || {};   // 规格覆盖（按行索引，全局）
 let materialOverrides = lsGet("tf_materials", {}) || {};   // 材质覆盖（按行索引，全局）
+/* 名称/单位/参数显示名 覆盖（全局，统一存一个对象）：
+   { names:{行索引:名称}, units:{行索引:单位}, parammeta:{参数key:{label,unit}} } */
+let labelOverrides = (function(){ const o = lsGet("tf_labels", null); return (o && typeof o==="object") ? o : {}; })();
+labelOverrides.names = labelOverrides.names || {};
+labelOverrides.units = labelOverrides.units || {};
+labelOverrides.parammeta = labelOverrides.parammeta || {};
 let formulaOverrides = lsGet("tf_formulas", {}) || {};
 let customItems      = loadCustom();
 let customParams     = loadCustomParams();
@@ -986,6 +1008,7 @@ function cacheToLocal(){
   lsSet("tf_prices", priceOverrides);
   lsSet("tf_specs", specOverrides);
   lsSet("tf_materials", materialOverrides);
+  lsSet("tf_labels", labelOverrides);
   lsSet("tf_formulas", formulaOverrides);
   lsSet("tf_custom", customItems);
   lsSet("tf_cparams", customParams);
@@ -1114,6 +1137,16 @@ function rowSpec(i){
 function rowMaterial(i){
   if(materialOverrides[i] !== undefined) return materialOverrides[i];
   return BOM[i] ? inferMaterial(BOM[i].spec) : "";
+}
+function rowName(i){ const v = labelOverrides.names[i]; return v !== undefined ? v : (BOM[i] ? BOM[i].name : ""); }
+function rowUnit(i){ const v = labelOverrides.units[i]; return v !== undefined ? v : (BOM[i] ? BOM[i].unit : ""); }
+function paramLabel(k){ const m = labelOverrides.parammeta[k]; return (m && m.label !== undefined) ? m.label : (DEFAULT_PARAMS[k] ? DEFAULT_PARAMS[k].label : k); }
+function paramUnit(k){ const m = labelOverrides.parammeta[k]; return (m && m.unit !== undefined) ? m.unit : (DEFAULT_PARAMS[k] ? DEFAULT_PARAMS[k].u : ""); }
+function setParamMeta(k, field, v){
+  const def = field === "label" ? (DEFAULT_PARAMS[k]?DEFAULT_PARAMS[k].label:"") : (DEFAULT_PARAMS[k]?DEFAULT_PARAMS[k].u:"");
+  const m = labelOverrides.parammeta[k] || {};
+  if(v === def) delete m[field]; else m[field] = v;
+  if(Object.keys(m).length) labelOverrides.parammeta[k] = m; else delete labelOverrides.parammeta[k];
 }
 function isFormulaOverridden(i){
   return formulaOverrides[i] !== undefined && formulaOverrides[i] !== DEFAULT_FORMULAS[i];
@@ -1260,9 +1293,10 @@ function renderParams(){
     }
     if(builtinByG[g]){
       for(const f of builtinByG[g]){
-        html += `<div class="field" title="变量名：${f.key}">
-          <label><code>${f.key}</code>${esc(f.label)}<span class="unit">${esc(f.u)}</span></label>
-          <input type="number" step="any" data-k="${f.key}" value="${tp[f.key]}"></div>`;
+        html += `<div class="field pfield" title="变量名：${f.key}">
+          <span class="plabel-wrap"><code>${f.key}</code><input class="plabel" data-plk="${f.key}" value="${escAttr(paramLabel(f.key))}" title="参数名称，可改"></span>
+          <input type="number" step="any" data-k="${f.key}" value="${tp[f.key]}">
+          <input class="punit" data-puk="${f.key}" value="${escAttr(paramUnit(f.key))}" title="单位，可改"></div>`;
       }
     }
     if(customByG[g] && customByG[g].length){
@@ -1310,6 +1344,12 @@ function renderParams(){
       t.params[el.dataset.k] = v;
       saveAll(); rerender();
     });
+  });
+  root.querySelectorAll("input[data-plk]").forEach(el=>{
+    el.addEventListener("input", ()=>{ setParamMeta(el.dataset.plk, "label", el.value); saveAll(); });
+  });
+  root.querySelectorAll("input[data-puk]").forEach(el=>{
+    el.addEventListener("input", ()=>{ setParamMeta(el.dataset.puk, "unit", el.value); saveAll(); });
   });
   const tplMng = document.getElementById("btnTplManage");
   if(tplMng) tplMng.addEventListener("click", openTemplateManager);
@@ -1848,13 +1888,13 @@ function renderBOM(){
       }
       html += `<tr class="${r.fxModified?'fx-modified':''}">
         <td class="idx num">${seq++}</td>
-        <td>${esc(r.item.name)}</td>
+        <td class="name-cell"><input class="text-in name-in" data-ni="${r.i}" value="${escAttr(rowName(r.i))}" title="部件名称，可改"></td>
         <td class="spec-cell"><input class="text-in spec-in" data-spi="${r.i}" value="${escAttr(rowSpec(r.i))}" title="规格，可改"></td>
         <td class="mat-cell"><select class="mat-sel" data-mi="${r.i}">
           <option value="" ${rowMaterial(r.i)===""?"selected":""}>—</option>
           ${MATERIALS.map(m=>`<option value="${m}" ${rowMaterial(r.i)===m?"selected":""}>${m}</option>`).join("")}
         </select></td>
-        <td class="unit">${esc(r.item.unit)}</td>
+        <td class="unit"><input class="text-in unit-in" data-ui="${r.i}" value="${escAttr(rowUnit(r.i))}" title="单位，可改"></td>
         <td class="qty num"><div class="qty-cell">
           <span class="qval ${isAgg?'qval-break':''}"${breakdownTitle?` title="${escAttr(breakdownTitle)}"`:''}>${fmtQty(r.qty)}</span>
           <button class="fx-btn ${r.fxModified?'modified':''}" data-fx-sys="${r.i}" title="编辑公式">ƒ</button>
@@ -1930,6 +1970,20 @@ function renderBOM(){
       const v = el.value;
       if(v === (BOM[i] ? inferMaterial(BOM[i].spec) : "")) delete materialOverrides[i];
       else materialOverrides[i] = v;
+      saveAll();
+    });
+  });
+  root.querySelectorAll("input[data-ni]").forEach(el=>{
+    el.addEventListener("input", ()=>{
+      const i = +el.dataset.ni, v = el.value;
+      if(v === (BOM[i]?BOM[i].name:"")) delete labelOverrides.names[i]; else labelOverrides.names[i] = v;
+      saveAll();   // 名称不影响数量，不整表重渲
+    });
+  });
+  root.querySelectorAll("input[data-ui]").forEach(el=>{
+    el.addEventListener("input", ()=>{
+      const i = +el.dataset.ui, v = el.value;
+      if(v === (BOM[i]?BOM[i].unit:"")) delete labelOverrides.units[i]; else labelOverrides.units[i] = v;
       saveAll();
     });
   });
@@ -2080,7 +2134,7 @@ function renderFxVars(){
   groups.push(["本设备数据（自动算出来的）", DERIVED_VARS.map(k=>chip(k, DERIVED_LABELS[k]||k, "derived"))]);
   const zc = activeEquip().zones.map((z,i)=>chip("zoneLen"+(i+1), (z.name||("防区"+(i+1)))+" 长度", "derived"));
   if(zc.length) groups.push(["各防区长度（米）", zc]);
-  groups.push(["产品规格参数（左侧可改）", Object.keys(DEFAULT_PARAMS).map(k=>chip(k, DEFAULT_PARAMS[k].label, ""))]);
+  groups.push(["产品规格参数（左侧可改）", Object.keys(DEFAULT_PARAMS).map(k=>chip(k, paramLabel(k), ""))]);
   const cps = customParams.filter(c=>c.key);
   if(cps.length) groups.push(["你的自定义参数", cps.map(c=>chip(c.key, c.label||c.key, "custom"))]);
   document.getElementById("fxVars").innerHTML =
@@ -2188,7 +2242,7 @@ function exportCSV(){
   lines.push([]);
   lines.push(["产品规格参数（共享）"]);
   for(const k in DEFAULT_PARAMS){
-    lines.push([DEFAULT_PARAMS[k].label, params[k], DEFAULT_PARAMS[k].u, "变量名: "+k]);
+    lines.push([paramLabel(k), params[k], paramUnit(k), "变量名: "+k]);
   }
   if(customParams.length){
     lines.push([]);
@@ -2252,7 +2306,7 @@ function exportCSV(){
       const qty = breakdown.reduce((a,b)=>a+b, 0);
       const sub = qty*price;
       if(t === "std") std += sub; else if(t === "opt") opt += sub;
-      const row = [seq++, sec, typeText, it.name, rowSpec(i), rowMaterial(i), it.unit,
+      const row = [seq++, sec, typeText, rowName(i), rowSpec(i), rowMaterial(i), rowUnit(i),
                    fmtQty(qty), price, sub.toFixed(2), rowFormula(i), it.note];
       breakdown.forEach(q=>row.push(fmtQty(q)));
       lines.push(row);
@@ -2808,6 +2862,7 @@ function serverToClient(data){
       prices: (data.settings&&data.settings.prices)||{},
       specs: (data.settings&&data.settings.specs)||{},
       materials: (data.settings&&data.settings.materials)||{},
+      labels: (data.settings&&data.settings.labels)||{names:{},units:{},parammeta:{}},
       formulas: (data.settings&&data.settings.formulas)||{},
       cparams: (data.settings&&data.settings.cparams)||[],
       templates: (data.settings&&data.settings.templates)||[],
@@ -2820,7 +2875,9 @@ function snapshotNow(){
     projects: projectList.map(p=>({id:p.id,name:p.name,customer:p.customer||"",description:p.description||"",createdAt:p.createdAt,updatedAt:p.updatedAt})),
     equipment: equipmentList.map(e=>({id:e.id,projectId:e.projectId,name:e.name,sets:+e.sets||1,mode:e.mode,templateId:e.templateId||null,zones:(e.zones||[]).map(z=>({name:z.name,length:+z.length||0}))})),
     custom: customItems.map(c=>({id:c.id,projectId:c.projectId,sec:c.sec,name:c.name,spec:c.spec,unit:c.unit,qty:+c.qty||0,qtyFormula:c.qtyFormula||undefined,price:+c.price||0,note:c.note})),
-    settings: { params:{...params}, prices:{...priceOverrides}, specs:{...specOverrides}, materials:{...materialOverrides}, formulas:{...formulaOverrides}, cparams:customParams.map(c=>({...c})),
+    settings: { params:{...params}, prices:{...priceOverrides}, specs:{...specOverrides}, materials:{...materialOverrides},
+      labels: JSON.parse(JSON.stringify(labelOverrides)),
+      formulas:{...formulaOverrides}, cparams:customParams.map(c=>({...c})),
       templates: templates.map(t=>({...t, params:{...t.params}})) },
   };
 }
@@ -2829,6 +2886,10 @@ function applyServerData(c){
   params = c.settings.params; priceOverrides = c.settings.prices;
   specOverrides = c.settings.specs || {};
   materialOverrides = c.settings.materials || {};
+  labelOverrides = c.settings.labels || {};
+  labelOverrides.names = labelOverrides.names || {};
+  labelOverrides.units = labelOverrides.units || {};
+  labelOverrides.parammeta = labelOverrides.parammeta || {};
   formulaOverrides = c.settings.formulas; customParams = c.settings.cparams;
   if(Array.isArray(c.settings.templates) && c.settings.templates.length) templates = c.settings.templates;
   seedTemplatesIfEmpty();
@@ -2915,7 +2976,7 @@ function diffToCalls(prev, cur){
   for(const c of prev.custom){ if(!cCur[c.id] && !isDelPrj(c.projectId)) calls.push({method:"DELETE", path:"custom/"+c.id}); }
   for(const id of deletedProjects) calls.push({method:"DELETE", path:"projects/"+id});
 
-  for(const k of ["params","prices","specs","materials","formulas","cparams","templates"]){
+  for(const k of ["params","prices","specs","materials","labels","formulas","cparams","templates"]){
     if(changed(prev.settings[k], cur.settings[k])) calls.push({method:"PUT", path:"settings/"+k, body:cur.settings[k]});
   }
   return calls;
