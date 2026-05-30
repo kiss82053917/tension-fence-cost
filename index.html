@@ -136,6 +136,8 @@
   td.sub{width:104px;font-weight:600;color:var(--brand-2)}
   td.del{width:34px;text-align:center}
   td.note{color:var(--muted);font-size:11.5px;max-width:220px}
+  td.spec-cell{min-width:150px}
+  td .spec-in{width:100%;background:#f0f7ff;font-size:11.5px}
   td .price-in{width:100%;padding:3px 5px;border:1px solid var(--line);border-radius:4px;
     text-align:right;font-variant-numeric:tabular-nums;background:var(--yellow);font-size:12.5px}
   td .price-in:focus{outline:none;border-color:var(--brand);background:#fffef2}
@@ -897,6 +899,7 @@ function loadEquipmentList(){
 
 let params           = loadParams();
 let priceOverrides   = lsGet("tf_prices", {}) || {};
+let specOverrides    = lsGet("tf_specs", {}) || {};   // 规格/材质覆盖（按行索引，全局）
 let formulaOverrides = lsGet("tf_formulas", {}) || {};
 let customItems      = loadCustom();
 let customParams     = loadCustomParams();
@@ -977,6 +980,7 @@ if(!equipmentList.some(e=>e.id===activeEquipId && e.projectId===activeProjectId)
 function cacheToLocal(){
   lsSet("tf_params", params);
   lsSet("tf_prices", priceOverrides);
+  lsSet("tf_specs", specOverrides);
   lsSet("tf_formulas", formulaOverrides);
   lsSet("tf_custom", customItems);
   lsSet("tf_cparams", customParams);
@@ -1085,6 +1089,9 @@ function evalFormulaErr(src, scope){
 
 function rowFormula(i){
   return formulaOverrides[i] !== undefined ? formulaOverrides[i] : DEFAULT_FORMULAS[i];
+}
+function rowSpec(i){
+  return specOverrides[i] !== undefined ? specOverrides[i] : (BOM[i] ? BOM[i].spec : "");
 }
 function isFormulaOverridden(i){
   return formulaOverrides[i] !== undefined && formulaOverrides[i] !== DEFAULT_FORMULAS[i];
@@ -1820,7 +1827,7 @@ function renderBOM(){
       html += `<tr class="${r.fxModified?'fx-modified':''}">
         <td class="idx num">${seq++}</td>
         <td>${esc(r.item.name)}</td>
-        <td>${esc(r.item.spec)}</td>
+        <td class="spec-cell"><input class="text-in spec-in" data-spi="${r.i}" value="${escAttr(rowSpec(r.i))}" title="规格/材质，可改（如 304→316）"></td>
         <td class="unit">${esc(r.item.unit)}</td>
         <td class="qty num"><div class="qty-cell">
           <span class="qval ${isAgg?'qval-break':''}"${breakdownTitle?` title="${escAttr(breakdownTitle)}"`:''}>${fmtQty(r.qty)}</span>
@@ -1879,6 +1886,15 @@ function renderBOM(){
       if(v === DEFAULT_PRICES[i]) delete priceOverrides[i];
       else priceOverrides[i] = v;
       saveAll(); rerender();
+    });
+  });
+  root.querySelectorAll("input[data-spi]").forEach(el=>{
+    el.addEventListener("input", ()=>{
+      const i = +el.dataset.spi;
+      const v = el.value;
+      if(v === (BOM[i] ? BOM[i].spec : "")) delete specOverrides[i];
+      else specOverrides[i] = v;
+      saveAll();   // 规格不影响数量，不必整表重渲染
     });
   });
   root.querySelectorAll("input[data-ci]").forEach(el=>{
@@ -2200,7 +2216,7 @@ function exportCSV(){
       const qty = breakdown.reduce((a,b)=>a+b, 0);
       const sub = qty*price;
       if(t === "std") std += sub; else if(t === "opt") opt += sub;
-      const row = [seq++, sec, typeText, it.name, it.spec, it.unit,
+      const row = [seq++, sec, typeText, it.name, rowSpec(i), it.unit,
                    fmtQty(qty), price, sub.toFixed(2), rowFormula(i), it.note];
       breakdown.forEach(q=>row.push(fmtQty(q)));
       lines.push(row);
@@ -2754,6 +2770,7 @@ function serverToClient(data){
     settings: {
       params: Object.assign(defaultParamValues(), (data.settings&&data.settings.params)||{}),
       prices: (data.settings&&data.settings.prices)||{},
+      specs: (data.settings&&data.settings.specs)||{},
       formulas: (data.settings&&data.settings.formulas)||{},
       cparams: (data.settings&&data.settings.cparams)||[],
       templates: (data.settings&&data.settings.templates)||[],
@@ -2766,13 +2783,14 @@ function snapshotNow(){
     projects: projectList.map(p=>({id:p.id,name:p.name,customer:p.customer||"",description:p.description||"",createdAt:p.createdAt,updatedAt:p.updatedAt})),
     equipment: equipmentList.map(e=>({id:e.id,projectId:e.projectId,name:e.name,sets:+e.sets||1,mode:e.mode,templateId:e.templateId||null,zones:(e.zones||[]).map(z=>({name:z.name,length:+z.length||0}))})),
     custom: customItems.map(c=>({id:c.id,projectId:c.projectId,sec:c.sec,name:c.name,spec:c.spec,unit:c.unit,qty:+c.qty||0,qtyFormula:c.qtyFormula||undefined,price:+c.price||0,note:c.note})),
-    settings: { params:{...params}, prices:{...priceOverrides}, formulas:{...formulaOverrides}, cparams:customParams.map(c=>({...c})),
+    settings: { params:{...params}, prices:{...priceOverrides}, specs:{...specOverrides}, formulas:{...formulaOverrides}, cparams:customParams.map(c=>({...c})),
       templates: templates.map(t=>({...t, params:{...t.params}})) },
   };
 }
 function applyServerData(c){
   projectList = c.projects; equipmentList = c.equipment; customItems = c.custom;
   params = c.settings.params; priceOverrides = c.settings.prices;
+  specOverrides = c.settings.specs || {};
   formulaOverrides = c.settings.formulas; customParams = c.settings.cparams;
   if(Array.isArray(c.settings.templates) && c.settings.templates.length) templates = c.settings.templates;
   seedTemplatesIfEmpty();
@@ -2859,7 +2877,7 @@ function diffToCalls(prev, cur){
   for(const c of prev.custom){ if(!cCur[c.id] && !isDelPrj(c.projectId)) calls.push({method:"DELETE", path:"custom/"+c.id}); }
   for(const id of deletedProjects) calls.push({method:"DELETE", path:"projects/"+id});
 
-  for(const k of ["params","prices","formulas","cparams","templates"]){
+  for(const k of ["params","prices","specs","formulas","cparams","templates"]){
     if(changed(prev.settings[k], cur.settings[k])) calls.push({method:"PUT", path:"settings/"+k, body:cur.settings[k]});
   }
   return calls;

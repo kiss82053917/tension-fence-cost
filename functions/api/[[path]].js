@@ -282,7 +282,7 @@ export async function onRequest(context) {
     }
     equipment.forEach(e => { try { e.zones = JSON.parse(e.zones); } catch (x) { e.zones = []; } });
     const srows = (await db.prepare("SELECT k, v FROM settings").all()).results;
-    const settings = { params: {}, prices: {}, formulas: {}, cparams: [], templates: [] };
+    const settings = { params: {}, prices: {}, specs: {}, formulas: {}, cparams: [], templates: [] };
     for (const r of srows) { try { settings[r.k] = JSON.parse(r.v); } catch (x) {} }
     return json({ projects, equipment, custom, settings });
   }
@@ -307,13 +307,13 @@ export async function onRequest(context) {
   if (segs[0] === "settings") {
     if (segs.length === 1 && method === "GET") {
       const { results } = await db.prepare("SELECT k, v FROM settings").all();
-      const out = { params: {}, prices: {}, formulas: {}, cparams: [], templates: [] };
+      const out = { params: {}, prices: {}, specs: {}, formulas: {}, cparams: [], templates: [] };
       for (const row of results) { try { out[row.k] = JSON.parse(row.v); } catch (e) {} }
       return json(out);
     }
     if (segs.length === 2 && method === "PUT") {
       const key = segs[1];
-      if (!["params", "prices", "formulas", "cparams", "templates"].includes(key)) return bad("未知设置键");
+      if (!["params", "prices", "specs", "formulas", "cparams", "templates"].includes(key)) return bad("未知设置键");
       const value = await readJson(request);           // 请求体即为要保存的值（对象或数组）
       const oldRow = await db.prepare("SELECT v FROM settings WHERE k = ?").bind(key).first();
       let oldVal; try { oldVal = oldRow ? JSON.parse(oldRow.v) : undefined; } catch (e) { oldVal = undefined; }
