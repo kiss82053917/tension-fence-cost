@@ -135,7 +135,8 @@
   td.price{width:96px}
   td.sub{width:104px;font-weight:600;color:var(--brand-2)}
   td.del{width:34px;text-align:center}
-  td.note{color:var(--muted);font-size:11.5px;max-width:220px}
+  td.note{color:var(--muted);font-size:11.5px;width:158px;max-width:158px}
+  td .note-in{width:100%;background:#f7fbff;font-size:11.5px;text-overflow:ellipsis;cursor:text}
   td.spec-cell{min-width:130px}
   td .spec-in{width:100%;background:#f0f7ff;font-size:11.5px}
   td.mat-cell{width:74px}
@@ -945,6 +946,7 @@ let labelOverrides = (function(){ const o = lsGet("tf_labels", null); return (o 
 labelOverrides.names = labelOverrides.names || {};
 labelOverrides.units = labelOverrides.units || {};
 labelOverrides.parammeta = labelOverrides.parammeta || {};
+labelOverrides.notes = labelOverrides.notes || {};
 let formulaOverrides = lsGet("tf_formulas", {}) || {};
 let customItems      = loadCustom();
 let customParams     = loadCustomParams();
@@ -1159,6 +1161,7 @@ function rowMaterial(i){
 }
 function rowName(i){ const v = labelOverrides.names[i]; return v !== undefined ? v : (BOM[i] ? BOM[i].name : ""); }
 function rowUnit(i){ const v = labelOverrides.units[i]; return v !== undefined ? v : (BOM[i] ? BOM[i].unit : ""); }
+function rowNote(i){ const v = labelOverrides.notes[i]; return v !== undefined ? v : (BOM[i] ? BOM[i].note : ""); }
 function paramLabel(k){ const m = labelOverrides.parammeta[k]; return (m && m.label !== undefined) ? m.label : (DEFAULT_PARAMS[k] ? DEFAULT_PARAMS[k].label : k); }
 function paramUnit(k){ const m = labelOverrides.parammeta[k]; return (m && m.unit !== undefined) ? m.unit : (DEFAULT_PARAMS[k] ? DEFAULT_PARAMS[k].u : ""); }
 /* 把公式里的变量名换成中文名称、运算符换成 ×÷，用于「计算公式」列的友好显示（只读；编辑仍走 ƒ） */
@@ -1944,7 +1947,7 @@ function renderBOM(){
         <td class="price"><input class="price-in" type="number" step="any" min="0"
             data-pi="${r.i}" value="${r.price}"></td>
         <td class="sub num">¥${money(r.sub)}</td>
-        <td class="note">${esc(r.item.note)}</td>
+        <td class="note"><input class="text-in note-in" data-noi="${r.i}" value="${escAttr(rowNote(r.i))}" placeholder="备注"${rowNote(r.i).length>12?` data-tip="${escAttr(rowNote(r.i))}"`:''}></td>
         <td></td>
       </tr>`;
     }
@@ -1967,7 +1970,7 @@ function renderBOM(){
         </div></td>
         <td class="price"><input class="price-in" type="number" step="any" min="0" data-ci="${ci}" data-f="price" value="${c.price}"></td>
         <td class="sub num">¥${money(sub)}</td>
-        <td><input class="text-in" data-ci="${ci}" data-f="note" value="${escAttr(c.note)}" placeholder="备注"></td>
+        <td class="note"><input class="text-in note-in" data-ci="${ci}" data-f="note" value="${escAttr(c.note)}" placeholder="备注"${(c.note||'').length>12?` data-tip="${escAttr(c.note)}"`:''}></td>
         <td class="del"><button class="del-btn" data-del="${ci}" title="删除">×</button></td>
       </tr>`;
     });
@@ -2027,6 +2030,14 @@ function renderBOM(){
     el.addEventListener("input", ()=>{
       const i = +el.dataset.ui, v = el.value;
       if(v === (BOM[i]?BOM[i].unit:"")) delete labelOverrides.units[i]; else labelOverrides.units[i] = v;
+      saveAll();
+    });
+  });
+  root.querySelectorAll("input[data-noi]").forEach(el=>{
+    el.addEventListener("input", ()=>{
+      const i = +el.dataset.noi, v = el.value;
+      if(v === (BOM[i]?BOM[i].note:"")) delete labelOverrides.notes[i]; else labelOverrides.notes[i] = v;
+      el.dataset.tip = v.length>12 ? v : "";   // 实时更新气泡内容
       saveAll();
     });
   });
@@ -2350,7 +2361,7 @@ function exportCSV(){
       const sub = qty*price;
       if(t === "std") std += sub; else if(t === "opt") opt += sub;
       const row = [seq++, sec, typeText, rowName(i), rowSpec(i), rowMaterial(i), rowUnit(i),
-                   fmtQty(qty), price, sub.toFixed(2), rowFormula(i), it.note];
+                   fmtQty(qty), price, sub.toFixed(2), rowFormula(i), rowNote(i)];
       breakdown.forEach(q=>row.push(fmtQty(q)));
       lines.push(row);
     }
@@ -2933,6 +2944,7 @@ function applyServerData(c){
   labelOverrides.names = labelOverrides.names || {};
   labelOverrides.units = labelOverrides.units || {};
   labelOverrides.parammeta = labelOverrides.parammeta || {};
+labelOverrides.notes = labelOverrides.notes || {};
   formulaOverrides = c.settings.formulas; customParams = c.settings.cparams;
   if(Array.isArray(c.settings.templates) && c.settings.templates.length) templates = c.settings.templates;
   seedTemplatesIfEmpty();
@@ -3083,10 +3095,16 @@ document.addEventListener("keydown", e=>{
   const tip = document.getElementById("fxTip");
   let pinned = false;
   function fill(el){
-    tip.innerHTML = `<div class="ft-f">${esc(el.dataset.fxfull||"")}</div>`
-      + (el.dataset.fxres ? `<div class="ft-res">＝ ${esc(el.dataset.fxres)}</div>` : "")
-      + (el.dataset.fxraw ? `<div class="ft-raw">原式：${esc(el.dataset.fxraw)}</div>` : "");
+    if(el.dataset.fxfull !== undefined){
+      tip.innerHTML = `<div class="ft-f">${esc(el.dataset.fxfull||"")}</div>`
+        + (el.dataset.fxres ? `<div class="ft-res">＝ ${esc(el.dataset.fxres)}</div>` : "")
+        + (el.dataset.fxraw ? `<div class="ft-raw">原式：${esc(el.dataset.fxraw)}</div>` : "");
+    }else{
+      tip.innerHTML = `<div class="ft-f" style="font-weight:400">${esc(el.dataset.tip||"")}</div>`;
+    }
   }
+  const trigSel = ".fx-ro[data-fxfull], [data-tip]";
+  const hasTip = el => el.dataset.fxfull !== undefined || (el.dataset.tip||"") !== "";
   function show(el){
     fill(el); tip.classList.remove("hidden");
     const r = el.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -3097,8 +3115,8 @@ document.addEventListener("keydown", e=>{
     tip.style.top = Math.max(8, top) + "px";
   }
   function hide(){ tip.classList.add("hidden"); }
-  document.addEventListener("mouseover", e=>{ const el = e.target.closest(".fx-ro[data-fxfull]"); if(el){ pinned = false; show(el); } });
-  document.addEventListener("mouseout",  e=>{ const el = e.target.closest(".fx-ro[data-fxfull]"); if(el && !pinned) hide(); });
+  document.addEventListener("mouseover", e=>{ const el = e.target.closest(trigSel); if(el && hasTip(el) && el !== document.activeElement){ pinned = false; show(el); } });
+  document.addEventListener("mouseout",  e=>{ const el = e.target.closest(trigSel); if(el && !pinned) hide(); });
   document.addEventListener("focusin",   e=>{ const el = e.target.closest(".fx-ro[data-fxfull]"); if(el) show(el); });
   document.addEventListener("focusout",  e=>{ if(!pinned) hide(); });
   document.addEventListener("click", e=>{
