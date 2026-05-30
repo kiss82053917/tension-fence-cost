@@ -282,6 +282,9 @@
   .project-card .equip-mini .info{color:var(--muted);font-size:11px;
     font-variant-numeric:tabular-nums;white-space:nowrap}
   .project-card .equip-empty{color:var(--muted);font-size:12px;padding:12px 0;text-align:center}
+  .project-card .equip-more{margin-top:4px;padding:5px 0;text-align:center;font-size:12px;color:var(--brand);
+    cursor:pointer;border-top:1px dashed var(--line)}
+  .project-card .equip-more:hover{color:var(--brand-2);background:var(--soft);border-radius:4px}
   .project-card .menu-btn{position:absolute;top:10px;right:10px;border:none;background:transparent;
     font-size:16px;color:var(--muted);padding:2px 8px;border-radius:4px;cursor:pointer;
     line-height:1}
@@ -1378,15 +1381,16 @@ function projectCardHTML(p){
     `创建于 ${dateStr}`,
     p.description ? `<span title="${escAttr(p.description)}">📝 ${esc(p.description.slice(0,20))}${p.description.length>20?'…':''}</span>` : "",
   ].filter(Boolean).join("<span>·</span>");
+  const SHOW = 3;
   const equipsHTML = es.length === 0
     ? `<div class="equip-empty">尚无设备 · 点击进入新增</div>`
-    : es.slice(0,5).map(e=>{
+    : es.slice(0,SHOW).map(e=>{
         const tz = e.zones.reduce((a,z)=>a+(+z.length||0),0);
         return `<div class="equip-mini">
           <span class="nm">${esc(e.name)}</span>
           <span class="info">${e.zones.length}区 · ${round2(tz)}m · ${e.sets}套 · ${e.mode==="single"?"单":"双"}</span>
         </div>`;
-      }).join("") + (es.length>5 ? `<div class="equip-mini"><span class="nm" style="color:var(--muted)">… 还有 ${es.length-5} 台设备</span><span></span></div>` : "");
+      }).join("") + (es.length>SHOW ? `<div class="equip-more">还有 ${es.length-SHOW} 台 · 点击查看全部 ${es.length} 台 →</div>` : "");
   return `<div class="project-card" data-pid="${p.id}">
     <button class="menu-btn" data-pmenu="${p.id}" title="更多操作">⋮</button>
     <h3>${esc(p.name)}</h3>
