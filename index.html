@@ -150,8 +150,8 @@
   .fx-wrap{display:flex;align-items:center;gap:4px}
   td .fx-in{flex:1;min-width:0;font-family:Menlo,Consolas,monospace;font-size:11px;background:#f0f7ff}
   td .fx-in.modified{background:#fff7d6;border-color:var(--warn)}
-  .fx-ro{flex:1;min-width:0;font-family:Menlo,Consolas,monospace;font-size:11px;color:var(--brand-2);
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fx-ro{flex:1;min-width:0;font-size:11.5px;color:var(--brand-2);line-height:1.4;word-break:break-word}
+  .fx-ro.modified{color:var(--warn);font-weight:600}
   /* 左侧参数：名称+单位可编辑，三列对齐（名称 | 数值 | 单位） */
   .field.pfield{grid-template-columns:1fr 46px 62px;gap:5px;align-items:center}
   .plabel{width:100%;min-width:0;border:1px solid transparent;background:transparent;font-size:12.5px;
@@ -1152,6 +1152,21 @@ function rowName(i){ const v = labelOverrides.names[i]; return v !== undefined ?
 function rowUnit(i){ const v = labelOverrides.units[i]; return v !== undefined ? v : (BOM[i] ? BOM[i].unit : ""); }
 function paramLabel(k){ const m = labelOverrides.parammeta[k]; return (m && m.label !== undefined) ? m.label : (DEFAULT_PARAMS[k] ? DEFAULT_PARAMS[k].label : k); }
 function paramUnit(k){ const m = labelOverrides.parammeta[k]; return (m && m.unit !== undefined) ? m.unit : (DEFAULT_PARAMS[k] ? DEFAULT_PARAMS[k].u : ""); }
+/* 把公式里的变量名换成中文名称、运算符换成 ×÷，用于「计算公式」列的友好显示（只读；编辑仍走 ƒ） */
+const DERIVED_CN = { sets:"套数", zonesPerPillar:"每柱防区数", totalLines:"总线数", mainPoles:"主螺旋柱数",
+  totalZoneLen:"单套总长", totalLen:"本设备总长", zoneCount:"防区数" };
+function humanizeFormula(src){
+  let s = String(src||"");
+  s = s.replace(/\bzoneLen(\d+)\b/g, (m,n)=>"防区"+n+"长度");
+  const map = {};
+  Object.keys(DEFAULT_PARAMS).forEach(k=>{ map[k] = paramLabel(k); });
+  Object.assign(map, DERIVED_CN);
+  customParams.forEach(c=>{ if(c.key) map[c.key] = c.label || c.key; });
+  Object.keys(map).sort((a,b)=>b.length-a.length).forEach(k=>{
+    s = s.replace(new RegExp("\\b"+k+"\\b","g"), map[k]);
+  });
+  return s.replace(/\*/g, " × ").replace(/\//g, " ÷ ").replace(/\s{2,}/g, " ").trim();
+}
 function setParamMeta(k, field, v){
   const def = field === "label" ? (DEFAULT_PARAMS[k]?DEFAULT_PARAMS[k].label:"") : (DEFAULT_PARAMS[k]?DEFAULT_PARAMS[k].u:"");
   const m = labelOverrides.parammeta[k] || {};
@@ -1904,8 +1919,8 @@ function renderBOM(){
         <td class="qty num">
           <span class="qval ${isAgg?'qval-break':''}"${breakdownTitle?` title="${escAttr(breakdownTitle)}"`:''}>${fmtQty(r.qty)}</span></td>
         <td class="fx-cell"><div class="fx-wrap">
-          <input class="text-in fx-in ${r.fxModified?'modified':''}" data-fxi="${r.i}" value="${escAttr(rowFormula(r.i))}" title="数量公式，可直接改">
-          <button class="fx-btn ${r.fxModified?'modified':''}" data-fx-sys="${r.i}" title="可视化编辑公式">ƒ</button>
+          <span class="fx-ro ${r.fxModified?'modified':''}" title="${escAttr(rowFormula(r.i))}">${esc(humanizeFormula(rowFormula(r.i)))}</span>
+          <button class="fx-btn ${r.fxModified?'modified':''}" data-fx-sys="${r.i}" title="编辑公式">ƒ</button>
         </div></td>
         <td class="price"><input class="price-in" type="number" step="any" min="0"
             data-pi="${r.i}" value="${r.price}"></td>
@@ -1928,7 +1943,7 @@ function renderBOM(){
             ? `<span class="qval">${fmtQty(qVal)}</span>`
             : `<input class="price-in" type="number" step="any" min="0" data-ci="${ci}" data-f="qty" value="${c.qty}">`}</td>
         <td class="fx-cell"><div class="fx-wrap">
-          <span class="fx-ro" title="${escAttr(c.qtyFormula||'')}">${hasFormula?esc(c.qtyFormula):'<span style="color:var(--muted)">固定值</span>'}</span>
+          <span class="fx-ro" title="${escAttr(c.qtyFormula||'')}">${hasFormula?esc(humanizeFormula(c.qtyFormula)):'<span style="color:var(--muted)">固定值</span>'}</span>
           <button class="fx-btn ${hasFormula?'modified':''}" data-fx-cus="${ci}" title="可视化编辑公式">ƒ</button>
         </div></td>
         <td class="price"><input class="price-in" type="number" step="any" min="0" data-ci="${ci}" data-f="price" value="${c.price}"></td>
@@ -1994,15 +2009,6 @@ function renderBOM(){
       const i = +el.dataset.ui, v = el.value;
       if(v === (BOM[i]?BOM[i].unit:"")) delete labelOverrides.units[i]; else labelOverrides.units[i] = v;
       saveAll();
-    });
-  });
-  /* 计算公式直接改（change：失焦/回车时生效并重算，避免逐字重渲丢焦点） */
-  root.querySelectorAll("input[data-fxi]").forEach(el=>{
-    el.addEventListener("change", ()=>{
-      const i = +el.dataset.fxi, v = el.value.trim();
-      if(!v || v === DEFAULT_FORMULAS[i]) delete formulaOverrides[i];
-      else formulaOverrides[i] = v;
-      saveAll(); rerender();
     });
   });
   root.querySelectorAll("input[data-ci]").forEach(el=>{
