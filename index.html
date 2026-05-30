@@ -145,7 +145,13 @@
   td .name-in{width:100%;font-weight:500;color:var(--ink);background:#f7fbff}
   td.unit{width:54px}
   td .unit-in{width:100%;text-align:center;background:#f7fbff;color:var(--muted);padding:3px 2px}
-  section.bom table{min-width:760px}
+  section.bom table{min-width:940px}
+  td.fx-cell{min-width:180px}
+  .fx-wrap{display:flex;align-items:center;gap:4px}
+  td .fx-in{flex:1;min-width:0;font-family:Menlo,Consolas,monospace;font-size:11px;background:#f0f7ff}
+  td .fx-in.modified{background:#fff7d6;border-color:var(--warn)}
+  .fx-ro{flex:1;min-width:0;font-family:Menlo,Consolas,monospace;font-size:11px;color:var(--brand-2);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* 左侧参数：名称+单位可编辑，三列对齐（名称 | 数值 | 单位） */
   .field.pfield{grid-template-columns:1fr 46px 62px;gap:5px;align-items:center}
   .plabel{width:100%;min-width:0;border:1px solid transparent;background:transparent;font-size:12.5px;
@@ -1873,7 +1879,7 @@ function renderBOM(){
       <table>
         <thead><tr>
           <th class="num">#</th><th>部件名称</th><th>规格</th><th>材质</th><th>单位</th>
-          <th class="num">数量${isAgg?'（合计）':''}</th><th class="num">单价(元)</th><th class="num">小计(元)</th>
+          <th class="num">数量${isAgg?'（合计）':''}</th><th>计算公式</th><th class="num">单价(元)</th><th class="num">小计(元)</th>
           <th>备注</th><th></th>
         </tr></thead><tbody>`;
 
@@ -1895,9 +1901,11 @@ function renderBOM(){
           ${MATERIALS.map(m=>`<option value="${m}" ${rowMaterial(r.i)===m?"selected":""}>${m}</option>`).join("")}
         </select></td>
         <td class="unit"><input class="text-in unit-in" data-ui="${r.i}" value="${escAttr(rowUnit(r.i))}" title="单位，可改"></td>
-        <td class="qty num"><div class="qty-cell">
-          <span class="qval ${isAgg?'qval-break':''}"${breakdownTitle?` title="${escAttr(breakdownTitle)}"`:''}>${fmtQty(r.qty)}</span>
-          <button class="fx-btn ${r.fxModified?'modified':''}" data-fx-sys="${r.i}" title="编辑公式">ƒ</button>
+        <td class="qty num">
+          <span class="qval ${isAgg?'qval-break':''}"${breakdownTitle?` title="${escAttr(breakdownTitle)}"`:''}>${fmtQty(r.qty)}</span></td>
+        <td class="fx-cell"><div class="fx-wrap">
+          <input class="text-in fx-in ${r.fxModified?'modified':''}" data-fxi="${r.i}" value="${escAttr(rowFormula(r.i))}" title="数量公式，可直接改">
+          <button class="fx-btn ${r.fxModified?'modified':''}" data-fx-sys="${r.i}" title="可视化编辑公式">ƒ</button>
         </div></td>
         <td class="price"><input class="price-in" type="number" step="any" min="0"
             data-pi="${r.i}" value="${r.price}"></td>
@@ -1916,11 +1924,12 @@ function renderBOM(){
         <td><input class="text-in" data-ci="${ci}" data-f="spec" value="${escAttr(c.spec)}" placeholder="规格/材质"></td>
         <td class="mat-cell" style="color:var(--muted);text-align:center">—</td>
         <td><input class="text-in" data-ci="${ci}" data-f="unit" value="${escAttr(c.unit)}" placeholder="个"></td>
-        <td class="qty"><div class="qty-cell">
-          ${hasFormula
+        <td class="qty">${hasFormula
             ? `<span class="qval">${fmtQty(qVal)}</span>`
-            : `<input class="price-in" type="number" step="any" min="0" data-ci="${ci}" data-f="qty" value="${c.qty}">`}
-          <button class="fx-btn ${hasFormula?'modified':''}" data-fx-cus="${ci}" title="编辑公式">ƒ</button>
+            : `<input class="price-in" type="number" step="any" min="0" data-ci="${ci}" data-f="qty" value="${c.qty}">`}</td>
+        <td class="fx-cell"><div class="fx-wrap">
+          <span class="fx-ro" title="${escAttr(c.qtyFormula||'')}">${hasFormula?esc(c.qtyFormula):'<span style="color:var(--muted)">固定值</span>'}</span>
+          <button class="fx-btn ${hasFormula?'modified':''}" data-fx-cus="${ci}" title="可视化编辑公式">ƒ</button>
         </div></td>
         <td class="price"><input class="price-in" type="number" step="any" min="0" data-ci="${ci}" data-f="price" value="${c.price}"></td>
         <td class="sub num">¥${money(sub)}</td>
@@ -1985,6 +1994,15 @@ function renderBOM(){
       const i = +el.dataset.ui, v = el.value;
       if(v === (BOM[i]?BOM[i].unit:"")) delete labelOverrides.units[i]; else labelOverrides.units[i] = v;
       saveAll();
+    });
+  });
+  /* 计算公式直接改（change：失焦/回车时生效并重算，避免逐字重渲丢焦点） */
+  root.querySelectorAll("input[data-fxi]").forEach(el=>{
+    el.addEventListener("change", ()=>{
+      const i = +el.dataset.fxi, v = el.value.trim();
+      if(!v || v === DEFAULT_FORMULAS[i]) delete formulaOverrides[i];
+      else formulaOverrides[i] = v;
+      saveAll(); rerender();
     });
   });
   root.querySelectorAll("input[data-ci]").forEach(el=>{
