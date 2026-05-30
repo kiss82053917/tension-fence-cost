@@ -146,17 +146,21 @@
   td.unit{width:54px}
   td .unit-in{width:100%;text-align:center;background:#f7fbff;color:var(--muted);padding:3px 2px}
   section.bom table{min-width:760px}
-  /* 左侧参数：名称+单位可编辑 */
-  .field.pfield{grid-template-columns:1fr 58px 40px;gap:4px}
-  .plabel-wrap{display:flex;align-items:center;gap:3px;min-width:0;overflow:hidden}
-  .plabel{flex:1;min-width:0;border:1px solid transparent;background:transparent;font-size:12.5px;
-    padding:2px 3px;border-radius:3px;color:var(--ink)}
+  /* 左侧参数：名称+单位可编辑，三列对齐（名称 | 数值 | 单位） */
+  .field.pfield{grid-template-columns:1fr 62px 40px;gap:5px;align-items:center}
+  .plabel{width:100%;min-width:0;border:1px solid transparent;background:transparent;font-size:12.5px;
+    padding:3px 4px;border-radius:4px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;text-align:left}
   .plabel:hover{background:#fff;border-color:var(--line)}
   .plabel:focus{outline:none;background:#fff;border-color:var(--brand)}
   .punit{border:1px solid transparent;background:transparent;font-size:11.5px;color:var(--muted);
-    padding:2px;text-align:center;border-radius:3px;width:100%}
+    padding:3px 2px;text-align:center;border-radius:4px;width:100%}
   .punit:hover{background:#fff;border-color:var(--line)}
   .punit:focus{outline:none;background:#fff;border-color:var(--brand)}
+  .pfield .dlab{display:flex;align-items:center;font-size:12.5px;color:var(--ink);min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px}
+  .pfield .dunit{display:flex;align-items:center;justify-content:center;font-size:11.5px;color:var(--muted)}
+  .field.pfield .plabel{text-align:left}     /* 名称左对齐（盖过 .field input 的右对齐） */
+  .field.pfield .punit{text-align:center}
   td .price-in{width:100%;padding:3px 5px;border:1px solid var(--line);border-radius:4px;
     text-align:right;font-variant-numeric:tabular-nums;background:var(--yellow);font-size:12.5px}
   td .price-in:focus{outline:none;border-color:var(--brand);background:#fffef2}
@@ -1248,14 +1252,14 @@ function renderActiveZones(){
   const sp = +paramsOf(e).mainSpacing || 1;
   let rows = "";
   e.zones.forEach((z, i)=>{
-    rows += `<tr><td class="zk">${esc(z.name||("防区"+(i+1)))} <code>zoneLen${i+1}</code></td>
+    rows += `<tr><td class="zk">${esc(z.name||("防区"+(i+1)))}</td>
       <td class="zv">${round2(+z.length||0)} m</td>
       <td class="zv">${zonePoles(z, sp)} 根</td></tr>`;
   });
   const sumLen = e.zones.reduce((a,z)=>a+(+z.length||0), 0);
   const sumPoles = e.zones.reduce((a,z)=>a+zonePoles(z, sp), 0);
   html += `<div class="zone-sum">
-    <div>本设备单套总长 <code>totalZoneLen</code>：<b>${round2(sumLen)} m</b> · 主螺旋柱：<b>${sumPoles} 根</b>
+    <div>本设备单套总长：<b>${round2(sumLen)} m</b> · 主螺旋柱：<b>${sumPoles} 根</b>
       · 本设备总价 ¥<b>${money(equipCost(e))}</b>（×${e.sets} 套）</div>
     <table>${rows}</table>
   </div>`;
@@ -1294,7 +1298,7 @@ function renderParams(){
     if(builtinByG[g]){
       for(const f of builtinByG[g]){
         html += `<div class="field pfield" title="变量名：${f.key}">
-          <span class="plabel-wrap"><code>${f.key}</code><input class="plabel" data-plk="${f.key}" value="${escAttr(paramLabel(f.key))}" title="参数名称，可改"></span>
+          <input class="plabel" data-plk="${f.key}" value="${escAttr(paramLabel(f.key))}" title="参数名称，可改（变量名 ${f.key}）">
           <input type="number" step="any" data-k="${f.key}" value="${tp[f.key]}">
           <input class="punit" data-puk="${f.key}" value="${escAttr(paramUnit(f.key))}" title="单位，可改"></div>`;
       }
@@ -1311,19 +1315,15 @@ function renderParams(){
 
   /* 派生量（基于当前选中设备） */
   const d = derivedFor(activeEquip());
-  html += `<h2>派生量 <span class="key-hint">(基于当前设备)</span></h2>
-    <div class="field"><label><code>sets</code>当前设备套数<span class="unit">套</span></label>
-      <input type="text" id="dSets" value="${d.sets}" readonly></div>
-    <div class="field"><label><code>zoneCount</code>防区数<span class="unit">个</span></label>
-      <input type="text" id="dZoneCount" value="${d.zoneCount}" readonly></div>
-    <div class="field"><label><code>totalZoneLen</code>单套总长<span class="unit">m</span></label>
-      <input type="text" id="dTotalZoneLen" value="${d.totalZoneLen}" readonly></div>
-    <div class="field"><label><code>totalLen</code>本设备总长<span class="unit">m</span></label>
-      <input type="text" id="dTotalLen" value="${d.totalLen}" readonly></div>
-    <div class="field"><label><code>totalLines</code>总线数<span class="unit">线</span></label>
-      <input type="text" id="dTotalLines" value="${d.totalLines}" readonly></div>
-    <div class="field"><label><code>mainPoles</code>主螺旋柱总数<span class="unit">根</span></label>
-      <input type="text" id="dMainPoles" value="${d.mainPoles}" readonly></div>`;
+  const drow = (label, id, val, unit) =>
+    `<div class="field pfield"><span class="dlab">${label}</span><input type="text" id="${id}" value="${val}" readonly><span class="dunit">${unit}</span></div>`;
+  html += `<h2>派生量 <span class="key-hint">(自动算)</span></h2>`
+    + drow("当前设备套数", "dSets", d.sets, "套")
+    + drow("防区数", "dZoneCount", d.zoneCount, "个")
+    + drow("单套总长", "dTotalZoneLen", round2(d.totalZoneLen), "m")
+    + drow("本设备总长", "dTotalLen", round2(d.totalLen), "m")
+    + drow("总线数", "dTotalLines", d.totalLines, "线")
+    + drow("主螺旋柱总数", "dMainPoles", d.mainPoles, "根");
 
   if(customByG["_misc"] && customByG["_misc"].length){
     html += `<h2>未分组自定义参数</h2>`;
