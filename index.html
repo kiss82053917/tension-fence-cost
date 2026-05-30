@@ -150,8 +150,16 @@
   .fx-wrap{display:flex;align-items:center;gap:4px}
   td .fx-in{flex:1;min-width:0;font-family:Menlo,Consolas,monospace;font-size:11px;background:#f0f7ff}
   td .fx-in.modified{background:#fff7d6;border-color:var(--warn)}
-  .fx-ro{flex:1;min-width:0;font-size:11.5px;color:var(--brand-2);line-height:1.4;word-break:break-word}
+  .fx-ro{flex:1;min-width:0;font-size:11.5px;color:var(--brand-2);white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;cursor:help;border-bottom:1px dotted var(--brand)}
+  .fx-ro:hover,.fx-ro:focus{color:var(--brand-2);outline:none}
   .fx-ro.modified{color:var(--warn);font-weight:600}
+  .fx-tip{position:fixed;z-index:210;max-width:300px;background:#111827;color:#fff;border-radius:8px;
+    padding:9px 12px;font-size:12.5px;line-height:1.6;box-shadow:0 10px 30px rgba(0,0,0,.3);pointer-events:none}
+  .fx-tip.hidden{display:none}
+  .fx-tip .ft-f{font-weight:600;word-break:break-word}
+  .fx-tip .ft-res{color:#86efac;margin-top:4px}
+  .fx-tip .ft-raw{color:#9ca3af;font-family:Menlo,Consolas,monospace;font-size:11px;margin-top:4px;word-break:break-all}
   /* 左侧参数：名称+单位可编辑，三列对齐（名称 | 数值 | 单位） */
   .field.pfield{grid-template-columns:1fr 46px 62px;gap:5px;align-items:center}
   .plabel{width:100%;min-width:0;border:1px solid transparent;background:transparent;font-size:12.5px;
@@ -541,6 +549,7 @@
 </div>
 
 <div id="toast" class="toast hidden"></div>
+<div id="fxTip" class="fx-tip hidden"></div>
 
 <!-- 项目信息编辑 -->
 <div id="prjModal" class="modal hidden">
@@ -1166,6 +1175,15 @@ function humanizeFormula(src){
     s = s.replace(new RegExp("\\b"+k+"\\b","g"), map[k]);
   });
   return s.replace(/\*/g, " × ").replace(/\//g, " ÷ ").replace(/\s{2,}/g, " ").trim();
+}
+/* 截断到 8 个汉字（中间的运算符照留），超出加省略号 */
+function truncFx(s){
+  let cjk = 0;
+  for(let i=0; i<s.length; i++){
+    if(/[一-鿿]/.test(s[i])) cjk++;
+    if(cjk >= 8) return s.slice(0, i+1) + (i+1 < s.length ? "…" : "");
+  }
+  return s;
 }
 function setParamMeta(k, field, v){
   const def = field === "label" ? (DEFAULT_PARAMS[k]?DEFAULT_PARAMS[k].label:"") : (DEFAULT_PARAMS[k]?DEFAULT_PARAMS[k].u:"");
@@ -1919,7 +1937,8 @@ function renderBOM(){
         <td class="qty num">
           <span class="qval ${isAgg?'qval-break':''}"${breakdownTitle?` title="${escAttr(breakdownTitle)}"`:''}>${fmtQty(r.qty)}</span></td>
         <td class="fx-cell"><div class="fx-wrap">
-          <span class="fx-ro ${r.fxModified?'modified':''}" title="${escAttr(rowFormula(r.i))}">${esc(humanizeFormula(rowFormula(r.i)))}</span>
+          <span class="fx-ro ${r.fxModified?'modified':''}" tabindex="0"
+            data-fxfull="${escAttr(humanizeFormula(rowFormula(r.i)))}" data-fxraw="${escAttr(rowFormula(r.i))}" data-fxres="${escAttr(fmtQty(r.qty)+' '+rowUnit(r.i))}">${esc(truncFx(humanizeFormula(rowFormula(r.i))))}</span>
           <button class="fx-btn ${r.fxModified?'modified':''}" data-fx-sys="${r.i}" title="编辑公式">ƒ</button>
         </div></td>
         <td class="price"><input class="price-in" type="number" step="any" min="0"
@@ -1943,7 +1962,7 @@ function renderBOM(){
             ? `<span class="qval">${fmtQty(qVal)}</span>`
             : `<input class="price-in" type="number" step="any" min="0" data-ci="${ci}" data-f="qty" value="${c.qty}">`}</td>
         <td class="fx-cell"><div class="fx-wrap">
-          <span class="fx-ro" title="${escAttr(c.qtyFormula||'')}">${hasFormula?esc(humanizeFormula(c.qtyFormula)):'<span style="color:var(--muted)">固定值</span>'}</span>
+          <span class="fx-ro" ${hasFormula?`tabindex="0" data-fxfull="${escAttr(humanizeFormula(c.qtyFormula))}" data-fxraw="${escAttr(c.qtyFormula)}" data-fxres="${escAttr(fmtQty(qVal)+' '+(c.unit||''))}"`:''}>${hasFormula?esc(truncFx(humanizeFormula(c.qtyFormula))):'<span style="color:var(--muted)">固定值</span>'}</span>
           <button class="fx-btn ${hasFormula?'modified':''}" data-fx-cus="${ci}" title="可视化编辑公式">ƒ</button>
         </div></td>
         <td class="price"><input class="price-in" type="number" step="any" min="0" data-ci="${ci}" data-f="price" value="${c.price}"></td>
@@ -3058,6 +3077,36 @@ document.addEventListener("keydown", e=>{
     if(currentUser && viewName === "project") manualSave();
   }
 });
+
+/* ===== 计算公式气泡（悬浮/点击显示完整公式 + 验证结果） ===== */
+(function(){
+  const tip = document.getElementById("fxTip");
+  let pinned = false;
+  function fill(el){
+    tip.innerHTML = `<div class="ft-f">${esc(el.dataset.fxfull||"")}</div>`
+      + (el.dataset.fxres ? `<div class="ft-res">＝ ${esc(el.dataset.fxres)}</div>` : "")
+      + (el.dataset.fxraw ? `<div class="ft-raw">原式：${esc(el.dataset.fxraw)}</div>` : "");
+  }
+  function show(el){
+    fill(el); tip.classList.remove("hidden");
+    const r = el.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
+    let left = r.left, top = r.bottom + 6;
+    if(left + tw > innerWidth - 8) left = innerWidth - tw - 8;
+    if(top + th > innerHeight - 8) top = r.top - th - 6;
+    tip.style.left = Math.max(8, left) + "px";
+    tip.style.top = Math.max(8, top) + "px";
+  }
+  function hide(){ tip.classList.add("hidden"); }
+  document.addEventListener("mouseover", e=>{ const el = e.target.closest(".fx-ro[data-fxfull]"); if(el){ pinned = false; show(el); } });
+  document.addEventListener("mouseout",  e=>{ const el = e.target.closest(".fx-ro[data-fxfull]"); if(el && !pinned) hide(); });
+  document.addEventListener("focusin",   e=>{ const el = e.target.closest(".fx-ro[data-fxfull]"); if(el) show(el); });
+  document.addEventListener("focusout",  e=>{ if(!pinned) hide(); });
+  document.addEventListener("click", e=>{
+    const el = e.target.closest(".fx-ro[data-fxfull]");
+    if(el){ pinned = true; show(el); e.stopPropagation(); return; }
+    pinned = false; hide();
+  });
+})();
 
 /* ===== 启动：先问后端当前会话，再进应用 ===== */
 (async function boot(){
