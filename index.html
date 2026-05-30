@@ -136,8 +136,11 @@
   td.sub{width:104px;font-weight:600;color:var(--brand-2)}
   td.del{width:34px;text-align:center}
   td.note{color:var(--muted);font-size:11.5px;max-width:220px}
-  td.spec-cell{min-width:150px}
+  td.spec-cell{min-width:130px}
   td .spec-in{width:100%;background:#f0f7ff;font-size:11.5px}
+  td.mat-cell{width:74px}
+  td .mat-sel{width:100%;padding:3px 4px;border:1px solid var(--line);border-radius:4px;font-size:12px;background:#f0f7ff;color:var(--brand-2)}
+  td .mat-sel:focus{outline:none;border-color:var(--brand)}
   td .price-in{width:100%;padding:3px 5px;border:1px solid var(--line);border-radius:4px;
     text-align:right;font-variant-numeric:tabular-nums;background:var(--yellow);font-size:12.5px}
   td .price-in:focus{outline:none;border-color:var(--brand);background:#fffef2}
@@ -899,7 +902,8 @@ function loadEquipmentList(){
 
 let params           = loadParams();
 let priceOverrides   = lsGet("tf_prices", {}) || {};
-let specOverrides    = lsGet("tf_specs", {}) || {};   // 规格/材质覆盖（按行索引，全局）
+let specOverrides    = lsGet("tf_specs", {}) || {};   // 规格覆盖（按行索引，全局）
+let materialOverrides = lsGet("tf_materials", {}) || {};   // 材质覆盖（按行索引，全局）
 let formulaOverrides = lsGet("tf_formulas", {}) || {};
 let customItems      = loadCustom();
 let customParams     = loadCustomParams();
@@ -981,6 +985,7 @@ function cacheToLocal(){
   lsSet("tf_params", params);
   lsSet("tf_prices", priceOverrides);
   lsSet("tf_specs", specOverrides);
+  lsSet("tf_materials", materialOverrides);
   lsSet("tf_formulas", formulaOverrides);
   lsSet("tf_custom", customItems);
   lsSet("tf_cparams", customParams);
@@ -1090,8 +1095,25 @@ function evalFormulaErr(src, scope){
 function rowFormula(i){
   return formulaOverrides[i] !== undefined ? formulaOverrides[i] : DEFAULT_FORMULAS[i];
 }
+/* 材质：从规格串里推断默认材质，并把材质词从规格里剥掉，做到「规格/材质」真正分开 */
+const MATERIALS = ["304", "316", "QC235"];
+function inferMaterial(spec){
+  const s = String(spec||"");
+  if(/316/.test(s)) return "316";
+  if(/QC ?235/i.test(s)) return "QC235";
+  if(/304/.test(s)) return "304";
+  return "";
+}
+function cleanSpec(spec){
+  return String(spec||"").replace(/^\s*(?:304|316|QC ?235)\s*(?:不锈钢|钣金|钢)?\s*[，,、:：\s]*/i, "").trim();
+}
 function rowSpec(i){
-  return specOverrides[i] !== undefined ? specOverrides[i] : (BOM[i] ? BOM[i].spec : "");
+  if(specOverrides[i] !== undefined) return specOverrides[i];
+  return BOM[i] ? cleanSpec(BOM[i].spec) : "";
+}
+function rowMaterial(i){
+  if(materialOverrides[i] !== undefined) return materialOverrides[i];
+  return BOM[i] ? inferMaterial(BOM[i].spec) : "";
 }
 function isFormulaOverridden(i){
   return formulaOverrides[i] !== undefined && formulaOverrides[i] !== DEFAULT_FORMULAS[i];
@@ -1810,7 +1832,7 @@ function renderBOM(){
         <span class="sub">小计 <b>¥${money(secSum)}</b></span></h3>
       <table>
         <thead><tr>
-          <th class="num">#</th><th>部件名称</th><th>规格/材质</th><th>单位</th>
+          <th class="num">#</th><th>部件名称</th><th>规格</th><th>材质</th><th>单位</th>
           <th class="num">数量${isAgg?'（合计）':''}</th><th class="num">单价(元)</th><th class="num">小计(元)</th>
           <th>备注</th><th></th>
         </tr></thead><tbody>`;
@@ -1827,7 +1849,11 @@ function renderBOM(){
       html += `<tr class="${r.fxModified?'fx-modified':''}">
         <td class="idx num">${seq++}</td>
         <td>${esc(r.item.name)}</td>
-        <td class="spec-cell"><input class="text-in spec-in" data-spi="${r.i}" value="${escAttr(rowSpec(r.i))}" title="规格/材质，可改（如 304→316）"></td>
+        <td class="spec-cell"><input class="text-in spec-in" data-spi="${r.i}" value="${escAttr(rowSpec(r.i))}" title="规格，可改"></td>
+        <td class="mat-cell"><select class="mat-sel" data-mi="${r.i}">
+          <option value="" ${rowMaterial(r.i)===""?"selected":""}>—</option>
+          ${MATERIALS.map(m=>`<option value="${m}" ${rowMaterial(r.i)===m?"selected":""}>${m}</option>`).join("")}
+        </select></td>
         <td class="unit">${esc(r.item.unit)}</td>
         <td class="qty num"><div class="qty-cell">
           <span class="qval ${isAgg?'qval-break':''}"${breakdownTitle?` title="${escAttr(breakdownTitle)}"`:''}>${fmtQty(r.qty)}</span>
@@ -1848,6 +1874,7 @@ function renderBOM(){
         <td class="idx num">+${n+1}</td>
         <td><input class="text-in" data-ci="${ci}" data-f="name" value="${escAttr(c.name)}" placeholder="物料名称"></td>
         <td><input class="text-in" data-ci="${ci}" data-f="spec" value="${escAttr(c.spec)}" placeholder="规格/材质"></td>
+        <td class="mat-cell" style="color:var(--muted);text-align:center">—</td>
         <td><input class="text-in" data-ci="${ci}" data-f="unit" value="${escAttr(c.unit)}" placeholder="个"></td>
         <td class="qty"><div class="qty-cell">
           ${hasFormula
@@ -1892,9 +1919,18 @@ function renderBOM(){
     el.addEventListener("input", ()=>{
       const i = +el.dataset.spi;
       const v = el.value;
-      if(v === (BOM[i] ? BOM[i].spec : "")) delete specOverrides[i];
+      if(v === (BOM[i] ? cleanSpec(BOM[i].spec) : "")) delete specOverrides[i];
       else specOverrides[i] = v;
       saveAll();   // 规格不影响数量，不必整表重渲染
+    });
+  });
+  root.querySelectorAll("select[data-mi]").forEach(el=>{
+    el.addEventListener("change", ()=>{
+      const i = +el.dataset.mi;
+      const v = el.value;
+      if(v === (BOM[i] ? inferMaterial(BOM[i].spec) : "")) delete materialOverrides[i];
+      else materialOverrides[i] = v;
+      saveAll();
     });
   });
   root.querySelectorAll("input[data-ci]").forEach(el=>{
@@ -2187,7 +2223,7 @@ function exportCSV(){
   /* 汇总 BOM */
   lines.push([]);
   lines.push(["本项目 BOM 汇总"]);
-  const headers = ["序号","分类","类型","部件名称","规格","单位","数量(合计)","单价(元)","小计(元)","数量公式","备注"];
+  const headers = ["序号","分类","类型","部件名称","规格","材质","单位","数量(合计)","单价(元)","小计(元)","数量公式","备注"];
   projEquips.forEach(e=>{ headers.push(`数量:${e.name}`); });
   lines.push(headers);
 
@@ -2216,7 +2252,7 @@ function exportCSV(){
       const qty = breakdown.reduce((a,b)=>a+b, 0);
       const sub = qty*price;
       if(t === "std") std += sub; else if(t === "opt") opt += sub;
-      const row = [seq++, sec, typeText, it.name, rowSpec(i), it.unit,
+      const row = [seq++, sec, typeText, it.name, rowSpec(i), rowMaterial(i), it.unit,
                    fmtQty(qty), price, sub.toFixed(2), rowFormula(i), it.note];
       breakdown.forEach(q=>row.push(fmtQty(q)));
       lines.push(row);
@@ -2225,7 +2261,7 @@ function exportCSV(){
       const q = cusRowQty(c);
       const sub = q*(Number(c.price)||0);
       if(t === "std") std += sub; else if(t === "opt") opt += sub; else cusOther += sub;
-      const row = [`+${n+1}`, sec, "自定义", c.name, c.spec, c.unit,
+      const row = [`+${n+1}`, sec, "自定义", c.name, c.spec, c.material||"", c.unit,
                    fmtQty(q), c.price, sub.toFixed(2),
                    c.qtyFormula||String(c.qty||0), c.note];
       projEquips.forEach(()=>row.push(""));
@@ -2771,6 +2807,7 @@ function serverToClient(data){
       params: Object.assign(defaultParamValues(), (data.settings&&data.settings.params)||{}),
       prices: (data.settings&&data.settings.prices)||{},
       specs: (data.settings&&data.settings.specs)||{},
+      materials: (data.settings&&data.settings.materials)||{},
       formulas: (data.settings&&data.settings.formulas)||{},
       cparams: (data.settings&&data.settings.cparams)||[],
       templates: (data.settings&&data.settings.templates)||[],
@@ -2783,7 +2820,7 @@ function snapshotNow(){
     projects: projectList.map(p=>({id:p.id,name:p.name,customer:p.customer||"",description:p.description||"",createdAt:p.createdAt,updatedAt:p.updatedAt})),
     equipment: equipmentList.map(e=>({id:e.id,projectId:e.projectId,name:e.name,sets:+e.sets||1,mode:e.mode,templateId:e.templateId||null,zones:(e.zones||[]).map(z=>({name:z.name,length:+z.length||0}))})),
     custom: customItems.map(c=>({id:c.id,projectId:c.projectId,sec:c.sec,name:c.name,spec:c.spec,unit:c.unit,qty:+c.qty||0,qtyFormula:c.qtyFormula||undefined,price:+c.price||0,note:c.note})),
-    settings: { params:{...params}, prices:{...priceOverrides}, specs:{...specOverrides}, formulas:{...formulaOverrides}, cparams:customParams.map(c=>({...c})),
+    settings: { params:{...params}, prices:{...priceOverrides}, specs:{...specOverrides}, materials:{...materialOverrides}, formulas:{...formulaOverrides}, cparams:customParams.map(c=>({...c})),
       templates: templates.map(t=>({...t, params:{...t.params}})) },
   };
 }
@@ -2791,6 +2828,7 @@ function applyServerData(c){
   projectList = c.projects; equipmentList = c.equipment; customItems = c.custom;
   params = c.settings.params; priceOverrides = c.settings.prices;
   specOverrides = c.settings.specs || {};
+  materialOverrides = c.settings.materials || {};
   formulaOverrides = c.settings.formulas; customParams = c.settings.cparams;
   if(Array.isArray(c.settings.templates) && c.settings.templates.length) templates = c.settings.templates;
   seedTemplatesIfEmpty();
@@ -2877,7 +2915,7 @@ function diffToCalls(prev, cur){
   for(const c of prev.custom){ if(!cCur[c.id] && !isDelPrj(c.projectId)) calls.push({method:"DELETE", path:"custom/"+c.id}); }
   for(const id of deletedProjects) calls.push({method:"DELETE", path:"projects/"+id});
 
-  for(const k of ["params","prices","specs","formulas","cparams","templates"]){
+  for(const k of ["params","prices","specs","materials","formulas","cparams","templates"]){
     if(changed(prev.settings[k], cur.settings[k])) calls.push({method:"PUT", path:"settings/"+k, body:cur.settings[k]});
   }
   return calls;
