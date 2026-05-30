@@ -114,6 +114,26 @@ st, d = call(admin, "POST", "projects/"+pA+"/snapshots/"+snapid+"/rollback"); ch
 st, d = call(admin, "GET", "projects/"+pA+"/equipment"); check("回滚恢复快照态(成员也能改/8)", d["equipment"][0]["name"]=="成员也能改" and d["equipment"][0]["sets"]==8)
 st, d = call(admin, "GET", "projects/"+pA+"/snapshots"); check("出现 回滚前自动备份", any(s["kind"]=="prerollback" for s in d["snapshots"]))
 
+# ---------- 模板（settings.templates + equipment.template_id） ----------
+section("模板")
+TPL = [
+  {"id":"tpl_double","name":"双防区","mode":"double","params":{"vertLines":19,"slopeLines":5,"mainSpacing":3}},
+  {"id":"tpl_single","name":"单防区","mode":"single","params":{"vertLines":19,"slopeLines":5,"mainSpacing":3}},
+  {"id":"tpl_30","name":"30线双防区","mode":"double","params":{"vertLines":30,"slopeLines":5,"mainSpacing":3}},
+]
+st, d = call(admin, "PUT", "settings/templates", TPL); check("PUT templates 200", st==200)
+st, d = call(admin, "GET", "settings"); check("GET settings 含3模板", st==200 and len(d.get("templates",[]))==3)
+check("模板字段完整(name/mode/params)", all(("name" in t and "mode" in t and "params" in t) for t in d["templates"]))
+st, d = call(admin, "POST", "projects", {"name":"模板项目"}); PT=d["project"]["id"]
+st, d = call(admin, "POST", "projects/"+PT+"/equipment", {"id":"tEq","name":"围栏","templateId":"tpl_30","zones":[{"name":"z","length":40}]}); check("建带 templateId 的设备", st==200)
+st, d = call(admin, "GET", "projects/"+PT+"/equipment"); check("设备返回 template_id", st==200 and d["equipment"][0].get("template_id")=="tpl_30")
+st, d = call(admin, "PATCH", "equipment/tEq", {"templateId":"tpl_single"}); check("PATCH 切换模板", st==200)
+st, d = call(admin, "GET", "projects/"+PT+"/equipment"); check("template_id 已切换", d["equipment"][0].get("template_id")=="tpl_single")
+st, d = call(admin, "GET", "bootstrap");
+_eq=[e for e in d.get("equipment",[]) if e["id"]=="tEq"]
+check("bootstrap 含 template_id", bool(_eq) and _eq[0].get("template_id")=="tpl_single")
+call(admin, "DELETE", "projects/"+PT)  # 清理
+
 # ---------- 删除级联 ----------
 section("删除级联")
 st, d = call(admin, "DELETE", "projects/"+pA); check("删项目甲", st==200)
