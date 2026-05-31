@@ -54,14 +54,15 @@
     font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums;background:var(--yellow)}
   .field input:focus{outline:none;border-color:var(--brand);background:#fffef2}
   .field input[readonly]{background:var(--green);color:#15803d;font-weight:600}
-  .cparam{display:grid;grid-template-columns:64px 1fr 70px 24px;gap:4px;align-items:center;
+  .cparam{display:grid;grid-template-columns:52px 1fr 46px 40px 18px;gap:5px;align-items:center;
     margin:4px 0;font-size:12.5px}
-  .cparam input{padding:3px 5px;border:1px solid var(--line);border-radius:4px;font-size:12px}
-  .cparam input.k{background:#f0f7ff;color:var(--brand-2);font-family:Menlo,Consolas,monospace}
+  .cparam input{padding:3px 4px;border:1px solid var(--line);border-radius:4px;font-size:12px;width:100%;min-width:0}
+  .cparam input.k{background:#f0f7ff;color:var(--brand-2);font-family:Menlo,Consolas,monospace;font-size:11px}
   .cparam input.l{background:#fff}
   .cparam input.v{background:var(--yellow);text-align:right;font-variant-numeric:tabular-nums}
-  .cparam input.u{background:#fff;color:var(--muted);font-size:11px}
+  .cparam input.u{background:#fff;color:var(--muted);font-size:11px;text-align:center}
   .cparam input:focus{outline:none;border-color:var(--brand)}
+  .cparam .del-btn{padding:0;font-size:14px}
   .add-line{margin:6px 0;padding:6px;border:1.5px dashed var(--line);border-radius:5px;
     text-align:center;color:var(--muted);cursor:pointer;font-size:12px;background:#fafbfd}
   .add-line:hover{border-color:var(--brand);color:var(--brand);background:var(--soft)}
@@ -1257,12 +1258,10 @@ function sectionType(secName){
  * ========================================================= */
 function cparamRow(cp, i){
   return `<div class="cparam" data-cpi="${i}">
-    <input class="k" data-cf="key"  value="${escAttr(cp.key||"")}"   placeholder="c1" maxlength="24">
-    <input class="l" data-cf="label" value="${escAttr(cp.label||"")}" placeholder="自定义参数名">
-    <span style="display:flex;gap:3px">
-      <input class="v" data-cf="value" type="number" step="any" value="${cp.value}" style="flex:1">
-      <input class="u" data-cf="unit"  value="${escAttr(cp.unit||"")}"  placeholder="单位" style="width:40px">
-    </span>
+    <input class="k" data-cf="key"  value="${escAttr(cp.key||"")}"   placeholder="c1" maxlength="24" title="变量名（公式里引用）">
+    <input class="l" data-cf="label" value="${escAttr(cp.label||"")}" placeholder="参数名">
+    <input class="v" data-cf="value" type="number" step="any" value="${cp.value}">
+    <input class="u" data-cf="unit"  value="${escAttr(cp.unit||"")}"  placeholder="单位">
     <button class="del-btn" data-cpdel="${i}" title="删除">×</button>
   </div>`;
 }
