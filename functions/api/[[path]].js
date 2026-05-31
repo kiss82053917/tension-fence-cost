@@ -146,6 +146,62 @@ async function makeSnapshot(db, me, pid, label, kind) {
   return id;
 }
 
+/* ---------- 合同模块：建表 + 给成员补「可见金额」列（运行时自愈，免手动迁移） ---------- */
+let _schemaReady = false;
+async function ensureSchema(db) {
+  if (_schemaReady) return;
+  const stmts = [
+    `CREATE TABLE IF NOT EXISTS contracts (
+       id TEXT PRIMARY KEY, kind TEXT NOT NULL DEFAULT 'purchase',
+       project_id TEXT, project_name TEXT NOT NULL DEFAULT '',
+       name TEXT NOT NULL DEFAULT '', code TEXT NOT NULL DEFAULT '',
+       party_a TEXT NOT NULL DEFAULT '', party_b TEXT NOT NULL DEFAULT '',
+       amount REAL NOT NULL DEFAULT 0,
+       pct_prepay REAL NOT NULL DEFAULT 0, pct_delivery REAL NOT NULL DEFAULT 0,
+       pct_stage1 REAL NOT NULL DEFAULT 0, pct_stage2 REAL NOT NULL DEFAULT 0,
+       pct_final REAL NOT NULL DEFAULT 0,
+       start_date TEXT NOT NULL DEFAULT '', end_date TEXT NOT NULL DEFAULT '',
+       status TEXT NOT NULL DEFAULT '', invoiced TEXT NOT NULL DEFAULT '', paid TEXT NOT NULL DEFAULT '',
+       note TEXT NOT NULL DEFAULT '', pos INTEGER NOT NULL DEFAULT 0,
+       created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL )`,
+    `CREATE INDEX IF NOT EXISTS idx_contracts_project ON contracts(project_id)`,
+    `CREATE TABLE IF NOT EXISTS contract_files (
+       id TEXT PRIMARY KEY, contract_id TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'contract',
+       filename TEXT NOT NULL DEFAULT '', mimetype TEXT NOT NULL DEFAULT '', size INTEGER NOT NULL DEFAULT 0,
+       r2_key TEXT NOT NULL DEFAULT '', source_path TEXT NOT NULL DEFAULT '', pos INTEGER NOT NULL DEFAULT 0,
+       created_at INTEGER NOT NULL )`,
+    `CREATE INDEX IF NOT EXISTS idx_cfiles_contract ON contract_files(contract_id)`,
+  ];
+  for (const s of stmts) await db.prepare(s).run();
+  try { await db.prepare("ALTER TABLE project_members ADD COLUMN can_view_amount INTEGER NOT NULL DEFAULT 1").run(); }
+  catch (e) { /* 列已存在 */ }
+  _schemaReady = true;
+}
+// 合同访问：admin 全可见；普通用户需为该项目成员，并按成员的 can_view_amount 决定能否看金额
+async function contractAccess(db, me, projectId) {
+  if (me.role === "admin") return { ok: true, amount: true };
+  if (!projectId) return { ok: false, amount: false };
+  const m = await db.prepare("SELECT can_view_amount FROM project_members WHERE project_id=? AND user_id=?")
+    .bind(projectId, me.id).first();
+  if (!m) return { ok: false, amount: false };
+  return { ok: true, amount: m.can_view_amount !== 0 };
+}
+// 把一条合同行整理成前端对象；无金额权限则金额置空并打标
+function shapeContract(row, canAmount) {
+  const o = {
+    id: row.id, kind: row.kind, projectId: row.project_id, projectName: row.project_name,
+    name: row.name, code: row.code, partyA: row.party_a, partyB: row.party_b,
+    pctPrepay: row.pct_prepay, pctDelivery: row.pct_delivery, pctStage1: row.pct_stage1,
+    pctStage2: row.pct_stage2, pctFinal: row.pct_final,
+    startDate: row.start_date, endDate: row.end_date, status: row.status,
+    invoiced: row.invoiced, paid: row.paid, note: row.note, pos: row.pos,
+    updatedAt: row.updated_at,
+  };
+  if (canAmount) { o.amount = row.amount; o.amountHidden = false; }
+  else { o.amount = null; o.amountHidden = true; }
+  return o;
+}
+
 /* =========================================================
  *  入口
  * ========================================================= */
@@ -160,6 +216,7 @@ export async function onRequest(context) {
 
   try {
     await ensureSeed(db);
+    await ensureSchema(db);
   } catch (e) {
     return json({ error: "数据库初始化失败：" + e.message + "（是否已执行 schema.sql？）" }, 500);
   }
@@ -375,7 +432,7 @@ export async function onRequest(context) {
         // 列表（成员/admin 可看）
         if (segs.length === 3 && method === "GET") {
           const { results } = await db.prepare(
-            "SELECT u.id, u.username, u.role, m.added_at FROM project_members m " +
+            "SELECT u.id, u.username, u.role, m.added_at, m.can_view_amount FROM project_members m " +
             "JOIN users u ON u.id = m.user_id WHERE m.project_id = ? ORDER BY m.added_at ASC")
             .bind(pid).all();
           return json({ members: results });
@@ -387,9 +444,21 @@ export async function onRequest(context) {
           const userId = body.userId || "";
           const u = await db.prepare("SELECT id, username FROM users WHERE id = ?").bind(userId).first();
           if (!u) return bad("用户不存在", 404);
-          await db.prepare("INSERT OR IGNORE INTO project_members (project_id, user_id, added_at) VALUES (?,?,?)")
-            .bind(pid, userId, Date.now()).run();
+          const cva = body.canViewAmount === false ? 0 : 1;
+          await db.prepare("INSERT OR IGNORE INTO project_members (project_id, user_id, added_at, can_view_amount) VALUES (?,?,?,?)")
+            .bind(pid, userId, Date.now(), cva).run();
+          await db.prepare("UPDATE project_members SET can_view_amount=? WHERE project_id=? AND user_id=?")
+            .bind(cva, pid, userId).run();
           await logIt(db, me, "添加成员", { projectId: pid, target: u.username });
+          return json({ ok: true });
+        }
+        // 改成员的「可见金额」权限（仅 admin）
+        if (segs.length === 4 && method === "PATCH") {
+          if (me.role !== "admin") return bad("需要管理员权限", 403);
+          const body = await readJson(request);
+          const cva = body.canViewAmount === false ? 0 : 1;
+          await db.prepare("UPDATE project_members SET can_view_amount=? WHERE project_id=? AND user_id=?")
+            .bind(cva, pid, segs[3]).run();
           return json({ ok: true });
         }
         // 移除成员（仅 admin）
@@ -567,6 +636,100 @@ export async function onRequest(context) {
       const delC = await db.prepare("SELECT name FROM custom_items WHERE id = ?").bind(cid).first();
       await db.prepare("DELETE FROM custom_items WHERE id = ?").bind(cid).run();
       await logIt(db, me, "删除自定义项", { projectId: projId, target: delC ? delC.name : cid });
+      return json({ ok: true });
+    }
+  }
+
+  /* ---- 合同管理 ---- */
+  if (segs[0] === "contracts") {
+    // 列表（访问过滤 + 金额打码）。可选 ?kind=purchase|sales
+    if (segs.length === 1 && method === "GET") {
+      const kind = new URL(request.url).searchParams.get("kind");
+      let rows;
+      if (me.role === "admin") {
+        rows = (await db.prepare("SELECT *, 1 AS cva FROM contracts ORDER BY pos ASC, created_at ASC").all()).results;
+      } else {
+        rows = (await db.prepare(
+          "SELECT c.*, m.can_view_amount AS cva FROM contracts c " +
+          "JOIN project_members m ON m.project_id = c.project_id AND m.user_id = ? " +
+          "ORDER BY c.pos ASC, c.created_at ASC").bind(me.id).all()).results;
+      }
+      let out = rows.map(r => shapeContract(r, r.cva !== 0));
+      if (kind === "purchase" || kind === "sales") out = out.filter(c => c.kind === kind);
+      return json({ contracts: out });
+    }
+    // 新建（仅 admin）
+    if (segs.length === 1 && method === "POST") {
+      if (me.role !== "admin") return bad("需要管理员权限", 403);
+      const b = await readJson(request);
+      const id = b.id || crypto.randomUUID();
+      const now = Date.now();
+      let pname = b.projectName || "";
+      if (b.projectId) {
+        const p = await db.prepare("SELECT name FROM projects WHERE id=?").bind(b.projectId).first();
+        if (p) pname = p.name;
+      }
+      const num = (x) => (x === undefined || x === null || x === "" ? 0 : (+x || 0));
+      await db.prepare(
+        "INSERT INTO contracts (id,kind,project_id,project_name,name,code,party_a,party_b,amount," +
+        "pct_prepay,pct_delivery,pct_stage1,pct_stage2,pct_final,start_date,end_date,status,invoiced,paid,note,pos,created_at,updated_at) " +
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+        .bind(id, b.kind === "sales" ? "sales" : "purchase", b.projectId || null, pname,
+          b.name || "", b.code || "", b.partyA || "", b.partyB || "", num(b.amount),
+          num(b.pctPrepay), num(b.pctDelivery), num(b.pctStage1), num(b.pctStage2), num(b.pctFinal),
+          b.startDate || "", b.endDate || "", b.status || "", b.invoiced || "", b.paid || "",
+          b.note || "", num(b.pos), now, now).run();
+      if (Array.isArray(b.files)) {
+        for (let i = 0; i < b.files.length; i++) {
+          const f = b.files[i];
+          await db.prepare("INSERT INTO contract_files (id,contract_id,category,filename,mimetype,size,r2_key,source_path,pos,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
+            .bind(crypto.randomUUID(), id, f.category || "contract", f.filename || "", f.mimetype || "", +f.size || 0, f.r2Key || "", f.sourcePath || "", i, now).run();
+        }
+      }
+      await logIt(db, me, "新建合同", { projectId: b.projectId || null, target: b.name || "" });
+      return json({ contract: { id } });
+    }
+    // 附件列表 GET /contracts/:id/files（成员可看）
+    if (segs.length === 3 && segs[2] === "files" && method === "GET") {
+      const c = await db.prepare("SELECT project_id FROM contracts WHERE id=?").bind(segs[1]).first();
+      if (!c) return bad("合同不存在", 404);
+      if (!(await contractAccess(db, me, c.project_id)).ok) return bad("无权访问该合同", 403);
+      const { results } = await db.prepare("SELECT id,category,filename,mimetype,size,r2_key,pos FROM contract_files WHERE contract_id=? ORDER BY pos ASC").bind(segs[1]).all();
+      return json({ files: results.map(f => ({ id: f.id, category: f.category, filename: f.filename, mimetype: f.mimetype, size: f.size, ready: !!f.r2_key })) });
+    }
+    // 改 / 删（仅 admin）
+    if (segs.length === 2 && segs[1] && (method === "PATCH" || method === "DELETE")) {
+      if (me.role !== "admin") return bad("需要管理员权限", 403);
+      const cid = segs[1];
+      const cur = await db.prepare("SELECT * FROM contracts WHERE id=?").bind(cid).first();
+      if (!cur) return bad("合同不存在", 404);
+      if (method === "DELETE") {
+        await db.batch([
+          db.prepare("DELETE FROM contract_files WHERE contract_id=?").bind(cid),
+          db.prepare("DELETE FROM contracts WHERE id=?").bind(cid),
+        ]);
+        await logIt(db, me, "删除合同", { projectId: cur.project_id, target: cur.name });
+        return json({ ok: true });
+      }
+      const b = await readJson(request);
+      const f = (k, col) => (b[k] !== undefined ? b[k] : cur[col]);
+      const num = (k, col) => (b[k] !== undefined ? (+b[k] || 0) : cur[col]);
+      let pid = cur.project_id, pname = cur.project_name;
+      if (b.projectId !== undefined) {
+        pid = b.projectId || null;
+        const p = pid ? await db.prepare("SELECT name FROM projects WHERE id=?").bind(pid).first() : null;
+        pname = p ? p.name : (b.projectName !== undefined ? b.projectName : "");
+      }
+      await db.prepare(
+        "UPDATE contracts SET kind=?,project_id=?,project_name=?,name=?,code=?,party_a=?,party_b=?,amount=?," +
+        "pct_prepay=?,pct_delivery=?,pct_stage1=?,pct_stage2=?,pct_final=?,start_date=?,end_date=?,status=?,invoiced=?,paid=?,note=?,updated_at=? WHERE id=?")
+        .bind(b.kind !== undefined ? (b.kind === "sales" ? "sales" : "purchase") : cur.kind,
+          pid, pname, f("name","name"), f("code","code"), f("partyA","party_a"), f("partyB","party_b"),
+          num("amount","amount"), num("pctPrepay","pct_prepay"), num("pctDelivery","pct_delivery"),
+          num("pctStage1","pct_stage1"), num("pctStage2","pct_stage2"), num("pctFinal","pct_final"),
+          f("startDate","start_date"), f("endDate","end_date"), f("status","status"),
+          f("invoiced","invoiced"), f("paid","paid"), f("note","note"), Date.now(), cid).run();
+      await logIt(db, me, "修改合同", { projectId: pid, target: f("name","name") });
       return json({ ok: true });
     }
   }

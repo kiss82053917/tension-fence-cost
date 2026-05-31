@@ -464,6 +464,45 @@
   .snap-row .si{flex:1;min-width:0}
   .snap-row .sk{font-size:10px;padding:1px 6px;border-radius:8px;background:var(--soft);color:var(--brand)}
   .snap-row .sk.auto{background:#fef3c7;color:var(--warn)} .snap-row .sk.prerollback{background:#e0e7ff;color:#4338ca}
+
+  /* ===== 合同管理 ===== */
+  .ct-filter{padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:12.5px;background:#fff;max-width:160px}
+  .contracts-page{display:block;padding:14px 20px;overflow:auto}
+  #contractsWrap{overflow:auto}
+  table.ct-table{border-collapse:collapse;width:100%;font-size:12.5px;background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  table.ct-table th,table.ct-table td{border-bottom:1px solid #eef1f6;padding:8px 10px;text-align:left;vertical-align:top}
+  table.ct-table th{background:var(--soft);color:var(--brand-2);font-weight:600;white-space:nowrap;position:sticky;top:0;z-index:1}
+  table.ct-table tr:last-child td{border-bottom:none}
+  table.ct-table tr:hover td{background:#fafbff}
+  .ct-amt{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+  .ct-amt.masked{color:#b91c1c;letter-spacing:1px}
+  .ct-sub{color:var(--muted);font-size:11px}
+  .ct-pay{display:flex;flex-wrap:wrap;gap:3px;min-width:130px}
+  .ct-chip{font-size:10.5px;padding:1px 6px;border-radius:8px;background:#eef2ff;color:#4338ca;white-space:nowrap}
+  .ct-chip.paid{background:#dcfce7;color:#15803d}
+  .ct-chip.inv{background:#fef3c7;color:#a16207}
+  .ct-chip.due{background:#f1f5f9;color:#94a3b8}
+  .ct-status{font-size:11px;padding:2px 8px;border-radius:10px;white-space:nowrap}
+  .ct-status.doing{background:#dbeafe;color:#1d4ed8}
+  .ct-status.done{background:#dcfce7;color:#15803d}
+  .ct-status.other{background:var(--soft);color:var(--muted)}
+  .ct-act{display:flex;gap:6px;white-space:nowrap}
+  .ct-file{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--brand);margin-right:6px}
+  .ct-file.pending{color:var(--muted)}
+  .ct-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+  .ct-form-grid .full{grid-column:1 / -1}
+  .ct-field{display:flex;flex-direction:column;gap:3px}
+  .ct-field label{font-size:11.5px;color:var(--muted)}
+  .ct-field input,.ct-field select,.ct-field textarea{padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit;width:100%}
+  .ct-field textarea{min-height:54px;resize:vertical}
+  .ct-pct-row{display:grid;gap:8px;align-items:end}
+  .ct-pct-cell{display:flex;flex-direction:column;gap:3px}
+  .ct-pct-cell .calc{font-size:11px;color:var(--ok);font-variant-numeric:tabular-nums}
+  .ct-pct-warn{font-size:11.5px;margin-top:4px}
+  .ct-field .ct-pay label.ct-chip{color:#3730a3;font-size:11.5px;padding:3px 8px}
+  .ct-field .ct-pay label.ct-chip.paid{color:#15803d}
+  .cva-toggle{font-size:11.5px;color:var(--muted);display:inline-flex;align-items:center;gap:3px;cursor:pointer;white-space:nowrap}
+  .mem-row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:7px 4px;border-bottom:1px solid #f0f2f7}
 </style>
 </head>
 <body>
@@ -500,6 +539,7 @@
     </span>
     <button id="btnNewPrj" class="act primary">+ 新建项目</button>
     <button id="btnPrjExport" class="act">导出 CSV</button>
+    <button id="btnContracts" class="act">📑 合同管理</button>
     <button id="btnUsers" class="act" style="display:none">👤 用户管理</button>
     <span class="sync-ind" title="同步状态"></span>
     <span class="stat user" id="curUserChip" title="当前登录用户">—</span>
@@ -552,6 +592,45 @@
   <main class="users-page">
     <table class="users-table" id="usersTable"></table>
   </main>
+</div>
+
+<!-- ===== 视图 4：合同管理 ===== -->
+<div id="viewContracts" class="view hidden">
+  <header class="projects-header">
+    <h2>📑 合同管理</h2>
+    <span class="mode" id="contractTabs">
+      <button data-ck="purchase" class="on">采购合同</button>
+      <button data-ck="sales">销售合同</button>
+    </span>
+    <select id="contractProjFilter" class="ct-filter"><option value="">全部项目</option></select>
+    <input id="contractSearch" class="search" placeholder="搜索合同名 / 编号 / 对方公司...">
+    <span class="stat">共 <b id="contractCount">0</b> 份</span>
+    <span class="stat grand">合计 ¥<b id="contractSum">—</b></span>
+    <button id="btnNewContract" class="act primary" style="display:none">+ 新建合同</button>
+    <button id="btnContractBack" class="btn-back">← 返回项目</button>
+  </header>
+  <main class="contracts-page">
+    <div id="contractsWrap"></div>
+  </main>
+</div>
+
+<!-- 合同编辑 -->
+<div id="contractModal" class="modal hidden">
+  <div class="modal-card" style="max-width:760px">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="contractModalTitle">新建合同</div>
+        <div class="modal-sub" id="contractModalSub">填写合同信息；款项金额按比例自动计算</div>
+      </div>
+      <button class="x-btn" id="contractModalClose">×</button>
+    </div>
+    <div class="modal-body" id="contractForm"></div>
+    <div class="fx-actions">
+      <button id="contractDelBtn" class="act danger" style="margin-right:auto;display:none">删除合同</button>
+      <button id="contractCancel" class="act">取消</button>
+      <button id="contractSave" class="primary">保存</button>
+    </div>
+  </div>
 </div>
 
 <div id="toast" class="toast hidden"></div>
@@ -2611,7 +2690,7 @@ async function doLogout(){
   showLogin();
 }
 function showLogin(){
-  ["viewProjects","viewProject","viewUsers"].forEach(id=>document.getElementById(id).classList.add("hidden"));
+  ["viewProjects","viewProject","viewUsers","viewContracts"].forEach(id=>document.getElementById(id).classList.add("hidden"));
   document.getElementById("viewLogin").classList.remove("hidden");
   document.getElementById("loginUser").value = "";
   document.getElementById("loginPwd").value = "";
@@ -2631,6 +2710,7 @@ function updateUserChrome(){
 async function mountApp(){
   document.getElementById("viewLogin").classList.add("hidden");
   document.getElementById("viewUsers").classList.add("hidden");
+  document.getElementById("viewContracts").classList.add("hidden");
   updateUserChrome();
   await bootstrapData();   // 从服务器拉取（或首登迁移本地数据）
   fixActiveRefs();
@@ -2804,7 +2884,12 @@ async function renderMembers(){
     const isSuper = m.username === "admin";
     html += `<div class="mem-row">
       <span><b>${esc(m.username)}</b> <span class="user-tag ${m.role==='admin'?'admin':'user'}">${m.role==='admin'?'管理员':'普通用户'}</span></span>
-      <button class="u-op danger" data-rm="${escAttr(m.id)}" ${isSuper?'disabled title="超级管理员默认可见全部，无需移除"':''}>移除</button>
+      <span style="display:flex;align-items:center;gap:10px">
+        <label class="cva-toggle" title="关掉后该成员看不到合同金额（显示 ****）">
+          <input type="checkbox" data-cva="${escAttr(m.id)}" ${m.can_view_amount!==0?'checked':''} ${isSuper?'disabled':''}> 可见金额
+        </label>
+        <button class="u-op danger" data-rm="${escAttr(m.id)}" ${isSuper?'disabled title="超级管理员默认可见全部，无需移除"':''}>移除</button>
+      </span>
     </div>`;
   });
   if(members.length===0) html += `<div style="padding:10px;color:var(--muted)">暂无成员</div>`;
@@ -2824,6 +2909,13 @@ async function renderMembers(){
       catch(e){ alert("移除失败：" + e.message); }
     });
   });
+  box.querySelectorAll("input[data-cva]").forEach(cb=>{
+    cb.addEventListener("change", async ()=>{
+      if(cb.disabled) return;
+      try{ await api(`projects/${memberPid}/members/${cb.dataset.cva}`, {method:"PATCH", body:{canViewAmount:cb.checked}}); showToast(cb.checked?"已允许看金额":"已隐藏金额","ok"); }
+      catch(e){ cb.checked = !cb.checked; alert("修改失败：" + e.message); }
+    });
+  });
   document.getElementById("memberAddBtn").addEventListener("click", async ()=>{
     const uid = document.getElementById("memberAddSel").value;
     if(!uid) return;
@@ -2831,6 +2923,245 @@ async function renderMembers(){
     catch(e){ alert("添加失败：" + e.message); }
   });
 }
+
+/* =========================================================
+ *  合同管理（视图 4）
+ * ========================================================= */
+let contractKind = "purchase";
+let contractsCache = [];
+let contractEditingId = null;
+const CT_STATUS = ["进行中","已完结","已作废"];
+const CT_INVOICE_PURCHASE = ["未开票","预付款","发货款","尾款","全款"];
+const CT_INVOICE_SALES = ["未开票","预付款","阶段一验收款","阶段二验收款","尾款","全款"];
+function ctMoney(n){ return "¥" + Number(n||0).toLocaleString("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function ctStatusCls(s){ return s==="进行中"?"doing":(s==="已完结"?"done":"other"); }
+
+async function openContractsView(){
+  document.getElementById("viewProjects").classList.add("hidden");
+  document.getElementById("viewProject").classList.add("hidden");
+  document.getElementById("viewUsers").classList.add("hidden");
+  document.getElementById("viewContracts").classList.remove("hidden");
+  document.getElementById("btnNewContract").style.display = isAdmin() ? "" : "none";
+  // tabs
+  document.querySelectorAll("#contractTabs button").forEach(b=>{
+    b.classList.toggle("on", b.dataset.ck===contractKind);
+  });
+  await loadContracts();
+}
+function closeContractsView(){
+  document.getElementById("viewContracts").classList.add("hidden");
+  document.getElementById("viewProjects").classList.remove("hidden");
+  renderProjectsView();
+}
+async function loadContracts(){
+  const wrap = document.getElementById("contractsWrap");
+  wrap.innerHTML = `<div style="padding:24px;color:var(--muted)">加载中…</div>`;
+  try{ contractsCache = (await api("contracts")).contracts || []; }
+  catch(e){ wrap.innerHTML = `<div style="padding:24px;color:var(--bad)">加载失败：${esc(e.message)}</div>`; return; }
+  // 项目筛选下拉
+  const projs = [...new Set(contractsCache.map(c=>c.projectName).filter(Boolean))].sort();
+  const sel = document.getElementById("contractProjFilter");
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">全部项目</option>` + projs.map(p=>`<option value="${escAttr(p)}">${esc(p)}</option>`).join("");
+  if(projs.includes(cur)) sel.value = cur;
+  renderContracts();
+}
+function renderContracts(){
+  const wrap = document.getElementById("contractsWrap");
+  const kw = (document.getElementById("contractSearch").value||"").trim().toLowerCase();
+  const projF = document.getElementById("contractProjFilter").value;
+  let rows = contractsCache.filter(c=>c.kind===contractKind);
+  if(projF) rows = rows.filter(c=>c.projectName===projF);
+  if(kw) rows = rows.filter(c=>[c.name,c.code,c.partyA,c.partyB,c.projectName,c.note].some(v=>(v||"").toLowerCase().includes(kw)));
+  document.getElementById("contractCount").textContent = rows.length;
+  // 合计（仅当所有可见金额时才显示数值，否则显示 —）
+  const anyHidden = rows.some(c=>c.amountHidden);
+  const sum = rows.reduce((s,c)=>s+(c.amount||0),0);
+  document.getElementById("contractSum").textContent = anyHidden ? "—" : sum.toLocaleString("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2});
+
+  const isPur = contractKind==="purchase";
+  // 各阶段定义：[key, label, pctField]
+  const stages = isPur
+    ? [["prepay","预付款","pctPrepay"],["delivery","发货款","pctDelivery"],["final","尾款","pctFinal"]]
+    : [["prepay","预付款","pctPrepay"],["stage1","阶段一","pctStage1"],["stage2","阶段二","pctStage2"],["final","尾款","pctFinal"]];
+
+  const head = `<tr>
+    <th>合同名称 / 编号</th>
+    <th>所属项目</th>
+    <th>${isPur?"采购方 / 供应商":"客户 / 签订方"}</th>
+    <th>合同金额</th>
+    <th>款项（比例·金额）</th>
+    <th>状态</th>
+    <th>开票 / 付款</th>
+    <th>起止 / 附件</th>
+    ${isAdmin()?"<th>操作</th>":""}
+  </tr>`;
+
+  const body = rows.map(c=>{
+    const paidSet = new Set((c.paid||"").split(",").map(s=>s.trim()).filter(Boolean));
+    const invSet = new Set((c.invoiced||"").split(",").map(s=>s.trim()).filter(Boolean));
+    const amtCell = c.amountHidden
+      ? `<span class="ct-amt masked" title="无金额查看权限">****</span>`
+      : `<span class="ct-amt">${ctMoney(c.amount)}</span>`;
+    const payCell = stages.map(([k,lab,pf])=>{
+      const pct = c[pf]||0;
+      if(!pct) return "";
+      const money = c.amountHidden ? "****" : ctMoney(c.amount*pct/100);
+      return `<span class="ct-chip ${paidSet.has(lab)||paidSet.has("全款")?'paid':'due'}" title="${lab} ${pct}%${c.amountHidden?'':' = '+ctMoney(c.amount*pct/100)}">${lab} ${pct}%</span>`;
+    }).join("");
+    const payMoney = `<div class="ct-sub">${stages.map(([k,lab,pf])=>{
+      const pct=c[pf]||0; if(!pct) return ""; return c.amountHidden?`${lab} ****`:`${lab} ${ctMoney(c.amount*pct/100)}`;
+    }).filter(Boolean).join(" · ")}</div>`;
+    const invChips = [...invSet].map(s=>`<span class="ct-chip inv">票·${esc(s)}</span>`).join("");
+    const paidChips = [...paidSet].map(s=>`<span class="ct-chip paid">款·${esc(s)}</span>`).join("");
+    const dates = [c.startDate,c.endDate].filter(Boolean).join(" ~ ") || "<span class='ct-sub'>—</span>";
+    return `<tr data-cid="${escAttr(c.id)}">
+      <td><div><b>${esc(c.name)||"<i class='ct-sub'>未命名</i>"}</b></div><div class="ct-sub">${esc(c.code)||""}</div></td>
+      <td>${esc(c.projectName)||"<span class='ct-sub'>—</span>"}</td>
+      <td>${esc(c.partyA)||"—"}<div class="ct-sub">${esc(c.partyB)||""}</div></td>
+      <td>${amtCell}</td>
+      <td><div class="ct-pay">${payCell||"<span class='ct-sub'>—</span>"}</div>${payMoney}</td>
+      <td><span class="ct-status ${ctStatusCls(c.status)}">${esc(c.status)||"—"}</span></td>
+      <td><div class="ct-pay">${invChips||"<span class='ct-chip due'>未开票</span>"}</div><div class="ct-pay" style="margin-top:3px">${paidChips||"<span class='ct-chip due'>未付款</span>"}</div></td>
+      <td><div class="ct-sub">${dates}</div><div class="ct-files" data-files="${escAttr(c.id)}"></div></td>
+      ${isAdmin()?`<td><div class="ct-act"><button class="act" data-edit="${escAttr(c.id)}">编辑</button></div></td>`:""}
+    </tr>`;
+  }).join("");
+
+  wrap.innerHTML = rows.length
+    ? `<table class="ct-table"><thead>${head}</thead><tbody>${body}</tbody></table>`
+    : `<div style="padding:30px;text-align:center;color:var(--muted)">暂无${isPur?"采购":"销售"}合同${isAdmin()?"，点右上角「+ 新建合同」添加":""}</div>`;
+
+  wrap.querySelectorAll("button[data-edit]").forEach(b=>b.addEventListener("click",()=>openContractEditor(b.dataset.edit)));
+  // 异步加载附件标记
+  rows.forEach(c=>loadContractFiles(c.id));
+}
+async function loadContractFiles(cid){
+  const box = document.querySelector(`.ct-files[data-files="${CSS.escape(cid)}"]`);
+  if(!box) return;
+  try{
+    const files = (await api(`contracts/${cid}/files`)).files || [];
+    if(!files.length){ box.innerHTML = ""; return; }
+    const catName = {contract:"合同",invoice:"发票",payment:"凭证"};
+    const grp = {};
+    files.forEach(f=>{ grp[f.category]=(grp[f.category]||0)+1; });
+    box.innerHTML = Object.keys(grp).map(k=>{
+      const ready = files.filter(f=>f.category===k).every(f=>f.ready);
+      return `<span class="ct-file ${ready?'':'pending'}" title="${ready?'可下载':'待迁移到云存储'}">📎${catName[k]||k}·${grp[k]}</span>`;
+    }).join("");
+  }catch(e){ box.innerHTML=""; }
+}
+function ctNum(v){ const n=parseFloat(v); return isFinite(n)?n:0; }
+async function openContractEditor(id){
+  if(!isAdmin()){ return; }
+  contractEditingId = id || null;
+  const c = id ? contractsCache.find(x=>x.id===id) : null;
+  const kind = c ? c.kind : contractKind;
+  const isPur = kind==="purchase";
+  document.getElementById("contractModalTitle").textContent = (id?"编辑":"新建") + (isPur?"采购合同":"销售合同");
+  document.getElementById("contractDelBtn").style.display = id ? "" : "none";
+  // 项目下拉来自 projectList
+  const projOpts = `<option value="">（不关联项目）</option>` +
+    (projectList||[]).map(p=>`<option value="${escAttr(p.id)}" ${c&&c.projectId===p.id?'selected':''}>${esc(p.name)}</option>`).join("");
+  const invList = isPur ? CT_INVOICE_PURCHASE : CT_INVOICE_SALES;
+  const payList = invList;
+  const invSet = new Set((c?.invoiced||"").split(",").map(s=>s.trim()).filter(Boolean));
+  const paidSet = new Set((c?.paid||"").split(",").map(s=>s.trim()).filter(Boolean));
+  const stages = isPur
+    ? [["pctPrepay","预付款"],["pctDelivery","发货款"],["pctFinal","尾款"]]
+    : [["pctPrepay","预付款"],["pctStage1","阶段一验收款"],["pctStage2","阶段二验收款"],["pctFinal","尾款"]];
+  const f = document.getElementById("contractForm");
+  f.innerHTML = `
+    <input type="hidden" id="ctKind" value="${kind}">
+    <div class="ct-form-grid">
+      <div class="ct-field full"><label>合同名称</label><input id="ctName" value="${escAttr(c?.name||"")}"></div>
+      <div class="ct-field"><label>合同编号</label><input id="ctCode" value="${escAttr(c?.code||"")}"></div>
+      <div class="ct-field"><label>所属项目（决定谁能看到此合同）</label><select id="ctProject">${projOpts}</select></div>
+      <div class="ct-field"><label>${isPur?"采购方":"客户公司"}</label><input id="ctPartyA" value="${escAttr(c?.partyA||"")}"></div>
+      <div class="ct-field"><label>${isPur?"供应商":"签订公司"}</label><input id="ctPartyB" value="${escAttr(c?.partyB||"")}"></div>
+      <div class="ct-field"><label>合同总金额（元）</label><input id="ctAmount" type="number" step="any" value="${c?.amount??""}"></div>
+      <div class="ct-field"><label>合同状态</label><select id="ctStatus">${CT_STATUS.map(s=>`<option ${c?.status===s?'selected':''}>${s}</option>`).join("")}</select></div>
+      <div class="ct-field full"><label>款项比例（%）— 金额自动算</label>
+        <div class="ct-pct-row" style="grid-template-columns:repeat(${stages.length},1fr)">
+          ${stages.map(([k,lab])=>`<div class="ct-pct-cell"><label>${lab}</label><input class="ctPct" data-pk="${k}" type="number" step="any" value="${c?.[k]??0}"><span class="calc" data-calc="${k}">¥0.00</span></div>`).join("")}
+        </div>
+        <div class="ct-pct-warn" id="ctPctWarn"></div>
+      </div>
+      <div class="ct-field"><label>开始时间</label><input id="ctStart" type="date" value="${escAttr(c?.startDate||"")}"></div>
+      <div class="ct-field"><label>结束时间</label><input id="ctEnd" type="date" value="${escAttr(c?.endDate||"")}"></div>
+      <div class="ct-field full"><label>开票情况（多选）</label>
+        <div class="ct-pay">${invList.map(s=>`<label class="ct-chip" style="cursor:pointer"><input type="checkbox" class="ctInv" value="${escAttr(s)}" ${invSet.has(s)?'checked':''}> ${s}</label>`).join("")}</div></div>
+      <div class="ct-field full"><label>付款情况（多选）</label>
+        <div class="ct-pay">${payList.map(s=>`<label class="ct-chip paid" style="cursor:pointer"><input type="checkbox" class="ctPaid" value="${escAttr(s)}" ${paidSet.has(s)?'checked':''}> ${s}</label>`).join("")}</div></div>
+      <div class="ct-field full"><label>备注</label><textarea id="ctNote">${esc(c?.note||"")}</textarea></div>
+    </div>`;
+  const recalc = ()=>{
+    const amt = ctNum(document.getElementById("ctAmount").value);
+    let sum=0;
+    f.querySelectorAll(".ctPct").forEach(inp=>{
+      const pct = ctNum(inp.value); sum+=pct;
+      f.querySelector(`[data-calc="${inp.dataset.pk}"]`).textContent = ctMoney(amt*pct/100);
+    });
+    const warn = document.getElementById("ctPctWarn");
+    if(Math.abs(sum-100)<0.01){ warn.style.color="var(--ok)"; warn.textContent=`比例合计 ${sum}% ✓`; }
+    else { warn.style.color="var(--bad)"; warn.textContent=`⚠ 比例合计 ${sum}%（通常应为 100%）`; }
+  };
+  f.querySelector("#ctAmount").addEventListener("input", recalc);
+  f.querySelectorAll(".ctPct").forEach(inp=>inp.addEventListener("input", recalc));
+  recalc();
+  document.getElementById("contractModal").classList.remove("hidden");
+}
+function closeContractEditor(){ document.getElementById("contractModal").classList.add("hidden"); contractEditingId=null; }
+async function saveContract(){
+  const f = document.getElementById("contractForm");
+  const body = {
+    kind: document.getElementById("ctKind").value,
+    name: document.getElementById("ctName").value.trim(),
+    code: document.getElementById("ctCode").value.trim(),
+    projectId: document.getElementById("ctProject").value || null,
+    partyA: document.getElementById("ctPartyA").value.trim(),
+    partyB: document.getElementById("ctPartyB").value.trim(),
+    amount: ctNum(document.getElementById("ctAmount").value),
+    status: document.getElementById("ctStatus").value,
+    startDate: document.getElementById("ctStart").value,
+    endDate: document.getElementById("ctEnd").value,
+    note: document.getElementById("ctNote").value.trim(),
+    invoiced: [...f.querySelectorAll(".ctInv:checked")].map(x=>x.value).join(","),
+    paid: [...f.querySelectorAll(".ctPaid:checked")].map(x=>x.value).join(","),
+  };
+  f.querySelectorAll(".ctPct").forEach(inp=>{ body[inp.dataset.pk] = ctNum(inp.value); });
+  if(!body.name){ alert("请填写合同名称"); return; }
+  try{
+    if(contractEditingId) await api(`contracts/${contractEditingId}`, {method:"PATCH", body});
+    else await api("contracts", {method:"POST", body});
+    closeContractEditor(); showToast("已保存","ok"); await loadContracts();
+  }catch(e){ alert("保存失败：" + e.message); }
+}
+async function deleteContract(){
+  if(!contractEditingId) return;
+  const c = contractsCache.find(x=>x.id===contractEditingId);
+  if(!confirm(`确定删除合同「${c?c.name:""}」？此操作不可恢复。`)) return;
+  try{ await api(`contracts/${contractEditingId}`, {method:"DELETE"}); closeContractEditor(); showToast("已删除","ok"); await loadContracts(); }
+  catch(e){ alert("删除失败：" + e.message); }
+}
+// 事件绑定
+document.getElementById("btnContracts").addEventListener("click", openContractsView);
+document.getElementById("btnContractBack").addEventListener("click", closeContractsView);
+document.getElementById("btnNewContract").addEventListener("click", ()=>openContractEditor(null));
+document.getElementById("contractTabs").addEventListener("click", e=>{
+  const b = e.target.closest("button[data-ck]"); if(!b) return;
+  contractKind = b.dataset.ck;
+  document.querySelectorAll("#contractTabs button").forEach(x=>x.classList.toggle("on", x===b));
+  document.getElementById("btnNewContract").style.display = isAdmin() ? "" : "none";
+  renderContracts();
+});
+document.getElementById("contractSearch").addEventListener("input", renderContracts);
+document.getElementById("contractProjFilter").addEventListener("change", renderContracts);
+document.getElementById("contractModalClose").addEventListener("click", closeContractEditor);
+document.getElementById("contractCancel").addEventListener("click", closeContractEditor);
+document.getElementById("contractSave").addEventListener("click", saveContract);
+document.getElementById("contractDelBtn").addEventListener("click", deleteContract);
+document.getElementById("contractModal").addEventListener("click", e=>{ if(e.target.id==="contractModal") closeContractEditor(); });
 document.getElementById("memberModalClose").addEventListener("click", closeMemberModal);
 document.getElementById("memberModalDone").addEventListener("click", closeMemberModal);
 document.getElementById("memberModal").addEventListener("click", e=>{ if(e.target.id==="memberModal") closeMemberModal(); });

@@ -5,3 +5,6 @@ node_modules/
 .idea/
 .wrangler/
 .dev.vars
+
+# 合同迁移源数据（含 NocoDB 内容，勿提交）
+migration/

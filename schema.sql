@@ -33,11 +33,12 @@ CREATE TABLE IF NOT EXISTS projects (
   updated_at  INTEGER NOT NULL
 );
 
--- 项目成员（多对多）
+-- 项目成员（多对多）。can_view_amount：是否可见合同金额（0=金额打码）
 CREATE TABLE IF NOT EXISTS project_members (
-  project_id TEXT NOT NULL,
-  user_id    TEXT NOT NULL,
-  added_at   INTEGER NOT NULL,
+  project_id      TEXT NOT NULL,
+  user_id         TEXT NOT NULL,
+  added_at        INTEGER NOT NULL,
+  can_view_amount INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY (project_id, user_id)
 );
 
@@ -109,3 +110,47 @@ CREATE TABLE IF NOT EXISTS snapshots (
   data       TEXT NOT NULL          -- JSON：{project:{...}, equipment:[...], custom:[...]}
 );
 CREATE INDEX IF NOT EXISTS idx_snap_project ON snapshots(project_id);
+
+-- ----- 合同管理（采购 + 销售合一，按 kind 区分） -----
+-- 采购付款：预付款/发货款/尾款；销售付款：预付款/阶段一/阶段二/尾款。比例存通用列。
+CREATE TABLE IF NOT EXISTS contracts (
+  id           TEXT PRIMARY KEY,
+  kind         TEXT NOT NULL DEFAULT 'purchase',  -- 'purchase' | 'sales'
+  project_id   TEXT,                              -- 所属项目（FK projects.id）
+  project_name TEXT NOT NULL DEFAULT '',          -- 冗余项目名（显示/迁移用）
+  name         TEXT NOT NULL DEFAULT '',          -- 合同名称
+  code         TEXT NOT NULL DEFAULT '',          -- 合同编号
+  party_a      TEXT NOT NULL DEFAULT '',          -- 采购方 / 客户公司
+  party_b      TEXT NOT NULL DEFAULT '',          -- 供应商 / 签订公司
+  amount       REAL NOT NULL DEFAULT 0,           -- 合同总金额（元）
+  pct_prepay   REAL NOT NULL DEFAULT 0,           -- 预付款比例
+  pct_delivery REAL NOT NULL DEFAULT 0,           -- 发货款比例（采购）
+  pct_stage1   REAL NOT NULL DEFAULT 0,           -- 阶段一验收款比例（销售）
+  pct_stage2   REAL NOT NULL DEFAULT 0,           -- 阶段二验收款比例（销售）
+  pct_final    REAL NOT NULL DEFAULT 0,           -- 尾款比例
+  start_date   TEXT NOT NULL DEFAULT '',
+  end_date     TEXT NOT NULL DEFAULT '',
+  status       TEXT NOT NULL DEFAULT '',          -- 合同状态
+  invoiced     TEXT NOT NULL DEFAULT '',          -- 开票情况（逗号分隔）
+  paid         TEXT NOT NULL DEFAULT '',          -- 付款情况（逗号分隔）
+  note         TEXT NOT NULL DEFAULT '',
+  pos          INTEGER NOT NULL DEFAULT 0,
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_contracts_project ON contracts(project_id);
+
+-- 合同附件（合同/发票/支付凭证）。r2_key 在 R2 迁移后填入
+CREATE TABLE IF NOT EXISTS contract_files (
+  id          TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL,
+  category    TEXT NOT NULL DEFAULT 'contract',   -- 'contract' | 'invoice' | 'payment'
+  filename    TEXT NOT NULL DEFAULT '',
+  mimetype    TEXT NOT NULL DEFAULT '',
+  size        INTEGER NOT NULL DEFAULT 0,
+  r2_key      TEXT NOT NULL DEFAULT '',            -- R2 对象键（空=未迁移）
+  source_path TEXT NOT NULL DEFAULT '',            -- NocoDB 永久路径（备用）
+  pos         INTEGER NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cfiles_contract ON contract_files(contract_id);
