@@ -12,8 +12,6 @@ binding = "DB"
 database_name = "tension-fence-cost-db"
 database_id = "26db9847-32b7-49fa-a3d7-a6be99d80932"
 
-# 合同附件存储。本地开发由 miniflare 模拟；线上需在 Pages 控制台
-# Settings → Functions → R2 bucket bindings 里加绑定（变量名 R2 → 桶 tension-fence-files）
-[[r2_buckets]]
-binding = "R2"
-bucket_name = "tension-fence-files"
+# 合同附件存储 R2：线上在 Pages 控制台 Settings → Functions → R2 bucket bindings
+# 加绑定（变量名 R2 → 桶 tension-fence-files）。本地开发用 `npm run dev`（已带 --r2=R2 模拟）。
+# 注意：不要在此写 [[r2_buckets]]，否则 Pages git 构建会失败。

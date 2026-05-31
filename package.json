@@ -6,7 +6,7 @@
   "scripts": {
     "db:local": "wrangler d1 execute tension-fence-cost-db --local --file=./schema.sql",
     "db:remote": "wrangler d1 execute tension-fence-cost-db --remote --file=./schema.sql",
-    "dev": "wrangler pages dev .",
+    "dev": "wrangler pages dev . --r2=R2",
     "deploy": "wrangler pages deploy ."
   },
   "devDependencies": {
