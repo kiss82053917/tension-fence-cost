@@ -718,7 +718,7 @@
 
       <div id="fxVars"></div>
 
-      <div class="fx-adv">想更复杂？可用函数：<code>ceil()</code> 向上取整、<code>floor()</code> 向下取整、<code>round()</code> 四舍五入、<code>max()</code>/<code>min()</code> 取大/取小。例：刺丝按 400 米一卷 → <code>ceil(totalLines*totalZoneLen/400)</code>。</div>
+      <div class="fx-adv">想更复杂？可用函数：<code>ceil()</code> 向上取整、<code>floor()</code> 向下取整、<code>round()</code> 四舍五入、<code>max()</code>/<code>min()</code> 取大/取小。例：刺丝按 400 米一卷 → <code>ceil(总线数 × 单套总长 ÷ 400)</code>。</div>
     </div>
     <div class="fx-actions">
       <button id="fxReset" class="danger">恢复默认公式</button>
@@ -1210,6 +1210,19 @@ function truncFx(s){
     if(/[一-鿿]/.test(s[i])) cjk++;
     if(cjk >= 8) return s.slice(0, i+1) + (i+1 < s.length ? "…" : "");
   }
+  return s;
+}
+/* 中文公式 → 英文公式（用于求值/保存）。用 split/join 整体替换，规避参数名里的括号歧义。 */
+function dehumanizeFormula(src){
+  let s = String(src||"").replace(/×/g, "*").replace(/÷/g, "/");
+  s = s.replace(/防区(\d+)长度/g, "zoneLen$1");
+  const map = {};   // 中文名 → 英文变量
+  Object.keys(DERIVED_CN).forEach(k=>{ map[DERIVED_CN[k]] = k; });
+  Object.keys(DEFAULT_PARAMS).forEach(k=>{ map[paramLabel(k)] = k; });
+  customParams.forEach(c=>{ if(c.key) map[c.label || c.key] = c.key; });
+  Object.keys(map).filter(Boolean).sort((a,b)=>b.length-a.length).forEach(cn=>{
+    s = s.split(cn).join(map[cn]);
+  });
   return s;
 }
 function setParamMeta(k, field, v){
@@ -2157,8 +2170,8 @@ function openFx(state){
   }
   document.getElementById("fxTitle").textContent = title;
   document.getElementById("fxSub").textContent   = sub;
-  fxInput.value     = currentSrc;
-  fxDefault.textContent = defaultSrc;
+  fxInput.value     = humanizeFormula(currentSrc);
+  fxDefault.textContent = humanizeFormula(defaultSrc);
   renderFxVars();
   updateFxResult();
   fxModal.classList.remove("hidden");
@@ -2173,17 +2186,18 @@ function renderFxVars(){
   };
   const scope = buildScope(activeEquip());
   const v = k => { const n = scope[k]; return Number.isFinite(+n) ? fmtQty(+n) : "—"; };
-  const chip = (code, label, cls) =>
-    `<span class="fx-chip ${cls||""}" data-ins="${escAttr(code)}" title="点我加进公式">
-       <span class="cn">${esc(label)}</span><span class="val">= ${v(code)}</span><span class="code">${esc(code)}</span></span>`;
+  // ins=插入公式里的中文名（求值时再转回英文）; label=芯片显示名; key=取当前值
+  const chip = (ins, label, key, cls) =>
+    `<span class="fx-chip ${cls||""}" data-ins="${escAttr(ins)}" title="点我加进公式">
+       <span class="cn">${esc(label)}</span><span class="val">= ${v(key)}</span></span>`;
 
-  /* 运算符 + 退格/清空 */
-  const ops = [["＋","+"],["−","-"],["×","*"],["÷","/"],["（","("],["）",")"]];
+  /* 运算符 + 退格/清空（插入中文符号，求值时转回） */
+  const ops = [["＋","+"],["−","-"],["×","×"],["÷","÷"],["（","("],["）",")"]];
   document.getElementById("fxOps").innerHTML =
     ops.map(([lab,ins])=>`<button class="fx-op" data-op="${ins}">${lab}</button>`).join("") +
     `<button class="fx-op txt" data-back="1">⌫ 退格</button><button class="fx-op txt" data-clear="1">清空</button>`;
 
-  /* 常用套路（整条替换） */
+  /* 常用套路（整条替换，显示中文公式） */
   const presets = [
     ["每套 1 个", "1 * sets"],
     ["每根探测器柱 1 个", "pillarsPerZone * sets"],
@@ -2192,16 +2206,16 @@ function renderFxVars(){
     ["每根主螺旋柱 1 个", "mainPoles * sets"],
   ];
   document.getElementById("fxPresets").innerHTML =
-    presets.map(([lab,f])=>`<button class="fx-preset" data-fill="${escAttr(f)}">${esc(lab)}</button>`).join("");
+    presets.map(([lab,f])=>`<button class="fx-preset" data-fill="${escAttr(humanizeFormula(f))}">${esc(lab)}</button>`).join("");
 
-  /* 变量分组 */
+  /* 变量分组（芯片插入中文名） */
   const groups = [];
-  groups.push(["本设备数据（自动算出来的）", DERIVED_VARS.map(k=>chip(k, DERIVED_LABELS[k]||k, "derived"))]);
-  const zc = activeEquip().zones.map((z,i)=>chip("zoneLen"+(i+1), (z.name||("防区"+(i+1)))+" 长度", "derived"));
+  groups.push(["本设备数据（自动算出来的）", DERIVED_VARS.map(k=>chip(DERIVED_CN[k]||DERIVED_LABELS[k]||k, DERIVED_LABELS[k]||k, k, "derived"))]);
+  const zc = activeEquip().zones.map((z,i)=>chip("防区"+(i+1)+"长度", (z.name||("防区"+(i+1)))+" 长度", "zoneLen"+(i+1), "derived"));
   if(zc.length) groups.push(["各防区长度（米）", zc]);
-  groups.push(["产品规格参数（左侧可改）", Object.keys(DEFAULT_PARAMS).map(k=>chip(k, paramLabel(k), ""))]);
+  groups.push(["产品规格参数（左侧可改）", Object.keys(DEFAULT_PARAMS).map(k=>chip(paramLabel(k), paramLabel(k), k, ""))]);
   const cps = customParams.filter(c=>c.key);
-  if(cps.length) groups.push(["你的自定义参数", cps.map(c=>chip(c.key, c.label||c.key, "custom"))]);
+  if(cps.length) groups.push(["你的自定义参数", cps.map(c=>chip(c.label||c.key, c.label||c.key, c.key, "custom"))]);
   document.getElementById("fxVars").innerHTML =
     groups.map(([t,chips])=>`<div class="fx-grp">${esc(t)}</div><div class="fx-chips">${chips.join("")}</div>`).join("");
 
@@ -2210,7 +2224,7 @@ function renderFxVars(){
   fxModal.querySelectorAll("#fxOps [data-op]").forEach(b=>b.addEventListener("click", ()=>insertAtCursor(fxInput, b.dataset.op)));
   fxModal.querySelectorAll(".fx-preset").forEach(b=>b.addEventListener("click", ()=>{ fxInput.value = b.dataset.fill; fxInput.focus(); updateFxResult(); }));
   fxModal.querySelector("#fxOps [data-back]").addEventListener("click", ()=>{
-    fxInput.value = fxInput.value.replace(/\s*(?:[A-Za-z_]\w*|\d+(?:\.\d+)?|[-+*/()])\s*$/, "");
+    fxInput.value = fxInput.value.replace(/\s*(?:[^\s×÷+\-*/()]+|[×÷+\-*/()])\s*$/, "");
     fxInput.focus(); updateFxResult();
   });
   fxModal.querySelector("#fxOps [data-clear]").addEventListener("click", ()=>{ fxInput.value = ""; fxInput.focus(); updateFxResult(); });
@@ -2221,8 +2235,8 @@ function insertAtCursor(input, text){
   const e = input.selectionEnd ?? input.value.length;
   const before = input.value.slice(0, s);
   const after  = input.value.slice(e);
-  const pad = (before && !/[\s+\-*/(]$/.test(before)) ? " " : "";
-  const padAfter = (after && !/^[\s+\-*/)]/.test(after)) ? " " : "";
+  const pad = (before && !/[\s+\-*/(（]$/.test(before)) ? " " : "";
+  const padAfter = (after && !/^[\s+\-*/)）]/.test(after)) ? " " : "";
   input.value = before + pad + text + padAfter + after;
   const pos = (before + pad + text).length;
   input.setSelectionRange(pos, pos);
@@ -2230,7 +2244,7 @@ function insertAtCursor(input, text){
 }
 function updateFxResult(){
   const scope = buildScope(activeEquip());
-  const r = evalFormulaErr(fxInput.value, scope);
+  const r = evalFormulaErr(dehumanizeFormula(fxInput.value), scope);
   if(r.ok){
     fxResult.textContent = fmtQty(Math.max(0, r.value));
     fxResult.style.color = "var(--ok)";
@@ -2250,7 +2264,7 @@ document.getElementById("fxClose").addEventListener("click", closeFx);
 document.getElementById("fxCancel").addEventListener("click", closeFx);
 document.getElementById("fxSave").addEventListener("click", ()=>{
   if(!fxState) return;
-  const src = fxInput.value.trim();
+  const src = dehumanizeFormula(fxInput.value.trim());
   if(fxState.kind === "sys"){
     if(!src || src === DEFAULT_FORMULAS[fxState.i]) delete formulaOverrides[fxState.i];
     else formulaOverrides[fxState.i] = src;
@@ -2268,10 +2282,10 @@ document.getElementById("fxSave").addEventListener("click", ()=>{
 document.getElementById("fxReset").addEventListener("click", ()=>{
   if(!fxState) return;
   if(fxState.kind === "sys"){
-    fxInput.value = DEFAULT_FORMULAS[fxState.i];
+    fxInput.value = humanizeFormula(DEFAULT_FORMULAS[fxState.i]);
   }else{
     delete customItems[fxState.i].qtyFormula;
-    fxInput.value = String(customItems[fxState.i].qty || 0);
+    fxInput.value = humanizeFormula(String(customItems[fxState.i].qty || 0));
   }
   updateFxResult();
 });
