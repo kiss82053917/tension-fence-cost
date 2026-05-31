@@ -12,6 +12,8 @@ binding = "DB"
 database_name = "tension-fence-cost-db"
 database_id = "26db9847-32b7-49fa-a3d7-a6be99d80932"
 
-# 合同附件存储 R2：线上在 Pages 控制台 Settings → Functions → R2 bucket bindings
-# 加绑定（变量名 R2 → 桶 tension-fence-files）。本地开发用 `npm run dev`（已带 --r2=R2 模拟）。
-# 注意：不要在此写 [[r2_buckets]]，否则 Pages git 构建会失败。
+# 合同附件存储 R2。本项目绑定通过 wrangler.toml 管理（D1 同此）。
+# bucket_name 必须是真实存在的桶名，否则 Pages 构建会失败。
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "contract-bucket-prod"
