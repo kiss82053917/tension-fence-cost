@@ -487,8 +487,9 @@
   .ct-status.done{background:#dcfce7;color:#15803d}
   .ct-status.other{background:var(--soft);color:var(--muted)}
   .ct-act{display:flex;gap:6px;white-space:nowrap}
-  .ct-file{display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--brand);margin-right:6px}
-  .ct-file.pending{color:var(--muted)}
+  .ct-file{display:inline-flex;align-items:center;gap:2px;font-size:11px;color:var(--brand);margin-right:7px;text-decoration:none;white-space:nowrap}
+  a.ct-file:hover{text-decoration:underline}
+  .ct-file.pending{color:var(--muted);cursor:default}
   .ct-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
   .ct-form-grid .full{grid-column:1 / -1}
   .ct-field{display:flex;flex-direction:column;gap:3px}
@@ -3036,18 +3037,23 @@ function renderContracts(){
   // 异步加载附件标记
   rows.forEach(c=>loadContractFiles(c.id));
 }
+const CT_CATNAME = {contract:"合同",invoice:"发票",payment:"凭证"};
 async function loadContractFiles(cid){
   const box = document.querySelector(`.ct-files[data-files="${CSS.escape(cid)}"]`);
   if(!box) return;
   try{
     const files = (await api(`contracts/${cid}/files`)).files || [];
     if(!files.length){ box.innerHTML = ""; return; }
-    const catName = {contract:"合同",invoice:"发票",payment:"凭证"};
-    const grp = {};
-    files.forEach(f=>{ grp[f.category]=(grp[f.category]||0)+1; });
-    box.innerHTML = Object.keys(grp).map(k=>{
-      const ready = files.filter(f=>f.category===k).every(f=>f.ready);
-      return `<span class="ct-file ${ready?'':'pending'}" title="${ready?'可下载':'待迁移到云存储'}">📎${catName[k]||k}·${grp[k]}</span>`;
+    // 同类多个时带序号；ready 的可点开查看（新标签），未就绪显示灰色待迁移
+    const catIdx = {};
+    box.innerHTML = files.map(f=>{
+      catIdx[f.category] = (catIdx[f.category]||0)+1;
+      const n = files.filter(x=>x.category===f.category).length;
+      const label = (CT_CATNAME[f.category]||f.category) + (n>1?("·"+catIdx[f.category]):"");
+      if(f.ready){
+        return `<a class="ct-file" href="/api/contracts/files/${encodeURIComponent(f.id)}/raw" target="_blank" rel="noopener" title="${escAttr(f.filename)}（点击查看）">📎${esc(label)}</a>`;
+      }
+      return `<span class="ct-file pending" title="${escAttr(f.filename)}（待上传到云存储）">📎${esc(label)}</span>`;
     }).join("");
   }catch(e){ box.innerHTML=""; }
 }

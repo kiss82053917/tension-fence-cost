@@ -689,6 +689,41 @@ export async function onRequest(context) {
       await logIt(db, me, "新建合同", { projectId: b.projectId || null, target: b.name || "" });
       return json({ contract: { id } });
     }
+    // 附件元数据清单（仅 admin，用于迁移上传时按 source_path 对应文件）
+    if (segs[1] === "files" && segs[2] === "manifest" && segs.length === 3 && method === "GET") {
+      if (me.role !== "admin") return bad("需要管理员权限", 403);
+      const { results } = await db.prepare("SELECT id, contract_id, category, filename, mimetype, size, source_path, r2_key FROM contract_files ORDER BY created_at ASC").all();
+      return json({ files: results });
+    }
+    // 上传附件到 R2（仅 admin）。?src=<NocoDB路径>，body=文件字节
+    if (segs[1] === "files" && segs[2] === "upload" && segs.length === 3 && method === "POST") {
+      if (me.role !== "admin") return bad("需要管理员权限", 403);
+      if (!env.R2) return bad("未绑定 R2 存储（Pages 设置里加 R2 binding：变量名 R2）", 500);
+      const src = new URL(request.url).searchParams.get("src") || "";
+      if (!src) return bad("缺少 src");
+      const ct = request.headers.get("x-content-type") || "application/octet-stream";
+      const buf = await request.arrayBuffer();
+      await env.R2.put(src, buf, { httpMetadata: { contentType: ct } });
+      await db.prepare("UPDATE contract_files SET r2_key=? WHERE source_path=?").bind(src, src).run();
+      return json({ ok: true, size: buf.byteLength });
+    }
+    // 查看 / 下载附件 GET /contracts/files/:fileId/raw（成员按合同权限可看；?dl=1 强制下载）
+    if (segs[1] === "files" && segs[3] === "raw" && segs.length === 4 && method === "GET") {
+      const fr = await db.prepare(
+        "SELECT cf.filename, cf.mimetype, cf.r2_key, c.project_id FROM contract_files cf " +
+        "JOIN contracts c ON c.id = cf.contract_id WHERE cf.id = ?").bind(segs[2]).first();
+      if (!fr) return bad("附件不存在", 404);
+      if (!(await contractAccess(db, me, fr.project_id)).ok) return bad("无权访问", 403);
+      if (!env.R2 || !fr.r2_key) return bad("文件未就绪", 404);
+      const obj = await env.R2.get(fr.r2_key);
+      if (!obj) return bad("文件不存在", 404);
+      const dispo = new URL(request.url).searchParams.get("dl") ? "attachment" : "inline";
+      const headers = new Headers();
+      headers.set("Content-Type", fr.mimetype || obj.httpMetadata?.contentType || "application/octet-stream");
+      headers.set("Content-Disposition", `${dispo}; filename*=UTF-8''${encodeURIComponent(fr.filename || "file")}`);
+      headers.set("Cache-Control", "private, max-age=120");
+      return new Response(obj.body, { headers });
+    }
     // 附件列表 GET /contracts/:id/files（成员可看）
     if (segs.length === 3 && segs[2] === "files" && method === "GET") {
       const c = await db.prepare("SELECT project_id FROM contracts WHERE id=?").bind(segs[1]).first();

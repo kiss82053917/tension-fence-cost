@@ -11,3 +11,9 @@ compatibility_date = "2024-09-23"
 binding = "DB"
 database_name = "tension-fence-cost-db"
 database_id = "26db9847-32b7-49fa-a3d7-a6be99d80932"
+
+# 合同附件存储。本地开发由 miniflare 模拟；线上需在 Pages 控制台
+# Settings → Functions → R2 bucket bindings 里加绑定（变量名 R2 → 桶 tension-fence-files）
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "tension-fence-files"
