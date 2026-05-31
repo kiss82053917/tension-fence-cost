@@ -96,8 +96,8 @@
 
   /* zone list */
   .zone-head{font-size:11px;color:var(--muted);margin:4px 0 2px;display:grid;
-    grid-template-columns:1fr 70px 30px 24px;gap:4px}
-  .zone-row{display:grid;grid-template-columns:1fr 70px 30px 24px;gap:4px;align-items:center;
+    grid-template-columns:1fr 70px 30px;gap:4px}
+  .zone-row{display:grid;grid-template-columns:1fr 70px 30px;gap:4px;align-items:center;
     margin:3px 0;font-size:12.5px}
   .zone-row input{padding:3px 5px;border:1px solid var(--line);border-radius:4px;font-size:12px}
   .zone-row .zname{background:#fff}
@@ -779,12 +779,35 @@ const DEFAULT_ZONES = [
 function defaultEquipment(idx){
   const tid = (typeof templates !== "undefined" && templates && templates[0]) ? templates[0].id : null;
   const mode = (tid && templateById(tid)) ? templateById(tid).mode : "double";
-  return { id: uid(), name: `设备 ${idx||1}`, sets: 1, mode, templateId: tid,
+  const e = { id: uid(), name: `设备 ${idx||1}`, sets: 1, mode, templateId: tid,
            zones: DEFAULT_ZONES.map(z=>({...z})) };
+  syncZonesToMode(e);   // 防区数按单/双自动匹配
+  return e;
 }
 function zonesPerPillarOf(equip){ const t = (typeof tplOf==="function") ? tplOf(equip) : null;
   const mode = t ? t.mode : (equip && equip.mode);
   return mode === "single" ? 1 : 2; }
+/* 防区数量由模板的单/双决定：单防区=1 个、双防区=2 个。返回是否发生了改变。 */
+function syncZonesToMode(equip){
+  if(!equip || !Array.isArray(equip.zones)) return false;
+  const need = zonesPerPillarOf(equip);
+  if(equip.zones.length === need) return false;
+  if(equip.zones.length > need){
+    equip.zones = equip.zones.slice(0, need);
+  }else{
+    const names = ["左防区", "右防区"];
+    while(equip.zones.length < need){
+      const i = equip.zones.length;
+      equip.zones.push({ name: names[i] || ("防区"+(i+1)), length: (+equip.zones[0]?.length) || 40 });
+    }
+  }
+  return true;
+}
+function syncAllZones(){
+  let changed = false;
+  (equipmentList||[]).forEach(e=>{ if(syncZonesToMode(e)) changed = true; });
+  return changed;
+}
 
 /* =========================================================
  *  BOM 数据（formula = 可编辑的数量公式字符串）
@@ -1280,17 +1303,18 @@ function renderEquipmentList(){
 
 function renderActiveZones(){
   const e = activeEquip();
-  let html = `<div style="font-size:11.5px;color:var(--muted);margin-bottom:3px">当前设备：<b>${esc(e.name)}</b> · 套数 ${e.sets} · ${e.mode==="single"?"单防区":"双防区"}</div>`;
-  html += `<div class="zone-head"><div>防区名称</div><div>长度</div><div></div><div></div></div>`;
+  syncZonesToMode(e);   // 防区数跟随模板（单=1 / 双=2），保证显示正确
+  const tplName = tplOf(e).name;
+  let html = `<div style="font-size:11.5px;color:var(--muted);margin-bottom:3px">当前设备：<b>${esc(e.name)}</b> · 套数 ${e.sets} · 模板「${esc(tplName)}」</div>`;
+  html += `<div style="font-size:11px;color:var(--muted);margin-bottom:4px">防区数量由模板的单/双自动决定（单防区 1 个 · 双防区 2 个），只需填名称和长度。</div>`;
+  html += `<div class="zone-head"><div>防区名称</div><div>长度</div><div></div></div>`;
   e.zones.forEach((z, i)=>{
-    html += `<div class="zone-row" data-zi="${i}" title="变量名：zoneLen${i+1}">
+    html += `<div class="zone-row" data-zi="${i}">
       <input class="zname" data-zf="name"   value="${escAttr(z.name||"")}" placeholder="防区${i+1}">
       <input class="zlen"  data-zf="length" type="number" step="any" min="0" value="${z.length}">
       <span class="zunit">米</span>
-      <button class="del-btn" data-zdel="${i}" title="删除防区">×</button>
     </div>`;
   });
-  html += `<div class="add-line" id="addZone">+ 在该设备下添加防区</div>`;
   const sp = +paramsOf(e).mainSpacing || 1;
   let rows = "";
   e.zones.forEach((z, i)=>{
@@ -1457,6 +1481,7 @@ function renderParams(){
           e.templateId = el.value;
           const t = templateById(e.templateId);
           if(t) e.mode = t.mode;   // 旧字段同步，便于离线/老逻辑
+          syncZonesToMode(e);      // 防区数跟随新模板单/双自动调整
         }else if(f === "name"){
           e.name = el.value;
         }
@@ -1516,21 +1541,8 @@ function renderParams(){
           e.zones[i][f] = el.value;
         }
         saveAll(); rerender();
-        renderParams();
       });
     });
-    row.querySelector("button[data-zdel]").addEventListener("click", ()=>{
-      const e = activeEquip();
-      if(e.zones.length <= 1){ alert("当前设备至少保留 1 个防区。"); return; }
-      e.zones.splice(i, 1);
-      saveAll(); renderParams(); rerender();
-    });
-  });
-  const addZ = document.getElementById("addZone");
-  if(addZ) addZ.addEventListener("click", ()=>{
-    const e = activeEquip();
-    e.zones.push({name:`防区${e.zones.length+1}`, length: 40});
-    saveAll(); renderParams(); rerender();
   });
 }
 
@@ -2540,6 +2552,7 @@ async function mountApp(){
   updateUserChrome();
   await bootstrapData();   // 从服务器拉取（或首登迁移本地数据）
   fixActiveRefs();
+  if(syncAllZones()) saveAll();   // 老数据：防区数对齐模板单/双
   if(viewName === "project" && activeProject()){
     document.getElementById("viewProjects").classList.add("hidden");
     document.getElementById("viewProject").classList.remove("hidden");
