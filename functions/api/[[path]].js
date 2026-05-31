@@ -707,6 +707,16 @@ export async function onRequest(context) {
       await db.prepare("UPDATE contract_files SET r2_key=? WHERE source_path=?").bind(src, src).run();
       return json({ ok: true, size: buf.byteLength });
     }
+    // 删除附件 DELETE /contracts/files/:fileId（仅 admin；连同 R2 对象删除）
+    if (segs[1] === "files" && segs.length === 3 && method === "DELETE") {
+      if (me.role !== "admin") return bad("需要管理员权限", 403);
+      const fr = await db.prepare("SELECT cf.r2_key, cf.filename, c.project_id FROM contract_files cf JOIN contracts c ON c.id=cf.contract_id WHERE cf.id=?").bind(segs[2]).first();
+      if (!fr) return bad("附件不存在", 404);
+      if (env.R2 && fr.r2_key) { try { await env.R2.delete(fr.r2_key); } catch (e) {} }
+      await db.prepare("DELETE FROM contract_files WHERE id=?").bind(segs[2]).run();
+      await logIt(db, me, "删除附件", { projectId: fr.project_id, target: fr.filename });
+      return json({ ok: true });
+    }
     // 查看 / 下载附件 GET /contracts/files/:fileId/raw（成员按合同权限可看；?dl=1 强制下载）
     if (segs[1] === "files" && segs[3] === "raw" && segs.length === 4 && method === "GET") {
       const fr = await db.prepare(
@@ -732,6 +742,30 @@ export async function onRequest(context) {
       const { results } = await db.prepare("SELECT id,category,filename,mimetype,size,r2_key,pos FROM contract_files WHERE contract_id=? ORDER BY pos ASC").bind(segs[1]).all();
       return json({ files: results.map(f => ({ id: f.id, category: f.category, filename: f.filename, mimetype: f.mimetype, size: f.size, ready: !!f.r2_key })) });
     }
+    // 上传新附件到合同 POST /contracts/:id/files?category=&filename=（仅 admin，body=文件字节）
+    if (segs.length === 3 && segs[2] === "files" && method === "POST") {
+      if (me.role !== "admin") return bad("需要管理员权限", 403);
+      if (!env.R2) return bad("未绑定 R2 存储（Pages 设置里加 R2 binding：变量名 R2）", 500);
+      const cid = segs[1];
+      const c = await db.prepare("SELECT id, project_id FROM contracts WHERE id=?").bind(cid).first();
+      if (!c) return bad("合同不存在", 404);
+      const url = new URL(request.url);
+      const catRaw = url.searchParams.get("category");
+      const category = ["contract", "invoice", "payment"].includes(catRaw) ? catRaw : "contract";
+      const filename = decodeURIComponent(url.searchParams.get("filename") || "file");
+      const ct = request.headers.get("x-content-type") || "application/octet-stream";
+      const buf = await request.arrayBuffer();
+      if (!buf.byteLength) return bad("空文件");
+      const fid = crypto.randomUUID();
+      const key = `cf/${cid}/${fid}`;
+      await env.R2.put(key, buf, { httpMetadata: { contentType: ct } });
+      const now = Date.now();
+      const posRow = await db.prepare("SELECT COALESCE(MAX(pos),-1)+1 AS p FROM contract_files WHERE contract_id=?").bind(cid).first();
+      await db.prepare("INSERT INTO contract_files (id,contract_id,category,filename,mimetype,size,r2_key,source_path,pos,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
+        .bind(fid, cid, category, filename, ct, buf.byteLength, key, "", posRow ? posRow.p : 0, now).run();
+      await logIt(db, me, "上传附件", { projectId: c.project_id, target: filename });
+      return json({ ok: true, file: { id: fid, category, filename, mimetype: ct, size: buf.byteLength, ready: true } });
+    }
     // 改 / 删（仅 admin）
     if (segs.length === 2 && segs[1] && (method === "PATCH" || method === "DELETE")) {
       if (me.role !== "admin") return bad("需要管理员权限", 403);
@@ -739,6 +773,10 @@ export async function onRequest(context) {
       const cur = await db.prepare("SELECT * FROM contracts WHERE id=?").bind(cid).first();
       if (!cur) return bad("合同不存在", 404);
       if (method === "DELETE") {
+        if (env.R2) {
+          const { results } = await db.prepare("SELECT r2_key FROM contract_files WHERE contract_id=? AND r2_key!=''").bind(cid).all();
+          for (const r of results) { try { await env.R2.delete(r.r2_key); } catch (e) {} }
+        }
         await db.batch([
           db.prepare("DELETE FROM contract_files WHERE contract_id=?").bind(cid),
           db.prepare("DELETE FROM contracts WHERE id=?").bind(cid),

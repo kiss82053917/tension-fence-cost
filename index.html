@@ -502,6 +502,17 @@
   .ct-pct-warn{font-size:11.5px;margin-top:4px}
   .ct-field .ct-pay label.ct-chip{color:#3730a3;font-size:11.5px;padding:3px 8px}
   .ct-field .ct-pay label.ct-chip.paid{color:#15803d}
+  /* 编辑器内附件管理 */
+  .ct-files-edit{display:flex;flex-direction:column;gap:8px}
+  .ct-file-cat-h{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;font-size:12px;color:var(--muted)}
+  .ct-file-add{padding:2px 9px;font-size:11px}
+  .ct-file-list{display:flex;flex-wrap:wrap;gap:6px}
+  .ct-file-edit{display:inline-flex;align-items:center;gap:2px;background:var(--soft);border:1px solid var(--line);
+    border-radius:6px;padding:2px 3px 2px 8px;font-size:12px;max-width:260px}
+  .ct-file-edit a{color:var(--brand);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ct-file-edit a:hover{text-decoration:underline}
+  .ct-file-del{border:none;background:none;color:var(--bad);cursor:pointer;font-size:16px;line-height:1;padding:0 3px;opacity:.65}
+  .ct-file-del:hover{opacity:1}
   .cva-toggle{font-size:11.5px;color:var(--muted);display:inline-flex;align-items:center;gap:3px;cursor:pointer;white-space:nowrap}
   .mem-row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:7px 4px;border-bottom:1px solid #f0f2f7}
   /* 标签式多选下拉 */
@@ -3234,6 +3245,9 @@ function renderContractForm(kind, c){
       <div class="ct-field full"><label>开票情况（多选）</label>${ctTagSelHTML("inv", CT_INVOICE)}</div>
       <div class="ct-field full"><label>付款情况（多选）</label>${ctTagSelHTML("paid", CT_PAID)}</div>
       <div class="ct-field full"><label>备注</label><textarea id="ctNote">${esc(c.note||"")}</textarea></div>
+      <div class="ct-field full"><label>附件</label>${contractEditingId
+        ? `<div id="ctFilesBox" class="ct-files-edit">加载中…</div>`
+        : `<div class="ct-sub" style="padding:4px 0">保存合同后即可在此上传合同 / 发票 / 凭证附件</div>`}</div>
     </div>`;
   const recalc = ()=>{
     const amt = ctNum(document.getElementById("ctAmount").value);
@@ -3252,8 +3266,60 @@ function renderContractForm(kind, c){
   ctInitTagSel("inv", CT_INVOICE);
   ctInitTagSel("paid", CT_PAID);
   document.getElementById("ctKind").addEventListener("change", e=>renderContractForm(e.target.value, readContractForm()));
+  if(contractEditingId) renderEditorFiles(contractEditingId);
 }
-function closeContractEditor(){ document.getElementById("contractModal").classList.add("hidden"); contractEditingId=null; }
+let ctFilesDirty = false;   // 编辑器内增删过附件 → 关闭时刷新列表标记
+async function renderEditorFiles(cid){
+  const box = document.getElementById("ctFilesBox");
+  if(!box) return;
+  let files = [];
+  try{ files = (await api(`contracts/${cid}/files`)).files || []; }
+  catch(e){ box.innerHTML = `<span style="color:var(--bad)">加载失败：${esc(e.message)}</span>`; return; }
+  const cats = [["contract","合同附件"],["invoice","发票附件"],["payment","支付凭证"]];
+  box.innerHTML = cats.map(([k,label])=>{
+    const fs = files.filter(f=>f.category===k);
+    const items = fs.map(f=>`<span class="ct-file-edit">
+      ${f.ready?`<a href="/api/contracts/files/${encodeURIComponent(f.id)}/raw" target="_blank" data-prev="${escAttr(f.id)}" data-fname="${escAttr(f.filename)}" data-mime="${escAttr(f.mimetype||"")}" title="预览">📎${esc(f.filename)}</a>`:`<span class="ct-sub">📎${esc(f.filename)}（未就绪）</span>`}
+      <button type="button" class="ct-file-del" data-del="${escAttr(f.id)}" data-fname="${escAttr(f.filename)}" title="删除">×</button></span>`).join("");
+    return `<div class="ct-file-cat">
+      <div class="ct-file-cat-h"><span>${label}</span><button type="button" class="act ct-file-add" data-cat="${k}">+ 上传</button></div>
+      <div class="ct-file-list">${items||'<span class="ct-sub">暂无</span>'}</div></div>`;
+  }).join("") + `<input type="file" id="ctFileInput" multiple style="display:none">`;
+
+  const fileInput = document.getElementById("ctFileInput");
+  let pendingCat = "contract";
+  box.querySelectorAll(".ct-file-add").forEach(b=>b.addEventListener("click", ()=>{ pendingCat = b.dataset.cat; fileInput.value=""; fileInput.click(); }));
+  fileInput.addEventListener("change", async ()=>{
+    const list = [...fileInput.files]; if(!list.length) return;
+    box.style.opacity = ".5";
+    try{
+      for(const file of list){ await uploadContractFile(cid, pendingCat, file); }
+      ctFilesDirty = true; showToast(`已上传 ${list.length} 个附件`, "ok");
+    }catch(e){ alert("上传失败：" + e.message); }
+    box.style.opacity = "";
+    renderEditorFiles(cid);
+  });
+  box.querySelectorAll(".ct-file-del").forEach(b=>b.addEventListener("click", async ()=>{
+    if(!confirm(`确定删除附件「${b.dataset.fname}」？`)) return;
+    try{ await api(`contracts/files/${b.dataset.del}`, {method:"DELETE"}); ctFilesDirty = true; renderEditorFiles(cid); }
+    catch(e){ alert("删除失败：" + e.message); }
+  }));
+  box.querySelectorAll("a[data-prev]").forEach(a=>a.addEventListener("click", e=>{
+    if(e.metaKey||e.ctrlKey||e.button===1) return;
+    e.preventDefault(); openFilePreview(a.dataset.prev, a.dataset.fname, a.dataset.mime);
+  }));
+}
+async function uploadContractFile(cid, category, file){
+  const q = `contracts/${encodeURIComponent(cid)}/files?category=${encodeURIComponent(category)}&filename=${encodeURIComponent(file.name)}`;
+  const res = await fetch("/api/"+q, { method:"POST", credentials:"include",
+    headers:{ "x-content-type": file.type || "application/octet-stream" }, body: file });
+  if(!res.ok){ const d = await res.json().catch(()=>({})); throw new Error(d.error || `HTTP ${res.status}`); }
+  return res.json();
+}
+function closeContractEditor(){
+  document.getElementById("contractModal").classList.add("hidden"); contractEditingId=null;
+  if(ctFilesDirty){ ctFilesDirty=false; loadContracts(); }   // 附件有增删 → 刷新列表标记
+}
 async function saveContract(){
   const f = document.getElementById("contractForm");
   const body = {
