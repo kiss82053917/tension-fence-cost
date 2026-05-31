@@ -504,6 +504,38 @@
   .ct-field .ct-pay label.ct-chip.paid{color:#15803d}
   .cva-toggle{font-size:11.5px;color:var(--muted);display:inline-flex;align-items:center;gap:3px;cursor:pointer;white-space:nowrap}
   .mem-row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:7px 4px;border-bottom:1px solid #f0f2f7}
+  /* 标签式多选下拉 */
+  .tagsel{position:relative}
+  .tagsel-box{display:flex;flex-wrap:wrap;gap:4px;align-items:center;min-height:34px;padding:4px 8px;
+    border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer}
+  .tagsel-box:hover{border-color:var(--brand)}
+  .tagsel-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:11px;
+    font-size:12px;white-space:nowrap;line-height:1.5}
+  .tagsel-chip .tagsel-x{cursor:pointer;font-style:normal;opacity:.55;font-size:13px}
+  .tagsel-chip .tagsel-x:hover{opacity:1}
+  .tagsel-caret{margin-left:auto;color:var(--muted);font-size:11px;pointer-events:none}
+  .tagsel-menu{position:absolute;top:100%;left:0;right:0;margin-top:4px;z-index:30;background:#fff;
+    border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(15,23,42,.14);
+    padding:5px;max-height:230px;overflow:auto}
+  .tagsel-menu.hidden{display:none}
+  .tagsel-opt{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer}
+  .tagsel-opt:hover{background:var(--soft)}
+  .tagsel-opt .tagsel-ck{margin-left:auto;color:var(--brand);font-weight:700;visibility:hidden}
+  .tagsel-opt.on .tagsel-ck{visibility:visible}
+  /* 附件预览 */
+  #filePreview{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;
+    justify-content:center;z-index:200}
+  #filePreview.hidden{display:none}
+  .fp-card{background:#fff;border-radius:10px;width:min(92vw,1000px);height:min(90vh,900px);
+    display:flex;flex-direction:column;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.3)}
+  .fp-head{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line)}
+  .fp-name{font-weight:600;font-size:13.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fp-actions{display:flex;align-items:center;gap:8px}
+  .fp-body{flex:1;background:#f3f4f6;display:flex;align-items:center;justify-content:center;overflow:auto}
+  .fp-body img{max-width:100%;max-height:100%;object-fit:contain}
+  .fp-body iframe{width:100%;height:100%;border:0;background:#fff}
+  .fp-other{padding:40px;text-align:center;color:var(--muted);font-size:13px}
+  .fp-other a{display:inline-block;margin-top:12px}
 </style>
 </head>
 <body>
@@ -631,6 +663,20 @@
       <button id="contractCancel" class="act">取消</button>
       <button id="contractSave" class="primary">保存</button>
     </div>
+  </div>
+</div>
+
+<!-- 合同附件预览 -->
+<div id="filePreview" class="modal hidden">
+  <div class="fp-card">
+    <div class="fp-head">
+      <span id="fpName" class="fp-name">附件</span>
+      <span class="fp-actions">
+        <a id="fpDownload" class="act" href="#" download>⬇ 下载</a>
+        <button id="fpClose" class="x-btn">×</button>
+      </span>
+    </div>
+    <div class="fp-body" id="fpBody"></div>
   </div>
 </div>
 
@@ -2932,10 +2978,55 @@ let contractKind = "purchase";
 let contractsCache = [];
 let contractEditingId = null;
 const CT_STATUS = ["进行中","已完结","已作废"];
-const CT_INVOICE_PURCHASE = ["未开票","预付款","发货款","尾款","全款"];
-const CT_INVOICE_SALES = ["未开票","预付款","阶段一验收款","阶段二验收款","尾款","全款"];
+const CT_INVOICE = ["预付款","发货款","尾款","全款","未开票"];   // 开票下拉值
+const CT_PAID    = ["预付款","发货款","尾款","全款"];            // 付款下拉值
+const CT_TAG_COLOR = {
+  "预付款":["#fef3c7","#a16207"], "发货款":["#ede9fe","#6d28d9"], "尾款":["#dcfce7","#15803d"],
+  "全款":["#dbeafe","#1d4ed8"], "未开票":["#f1f5f9","#64748b"],
+  "阶段一验收款":["#ccfbf1","#0f766e"], "阶段二验收款":["#fce7f3","#be185d"],
+};
+function ctTagColor(v){ return CT_TAG_COLOR[v] || ["#eef2ff","#4338ca"]; }
 function ctMoney(n){ return "¥" + Number(n||0).toLocaleString("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function ctStatusCls(s){ return s==="进行中"?"doing":(s==="已完结"?"done":"other"); }
+
+/* ---- 标签式多选下拉（开票/付款） ---- */
+let ctSel = { inv: [], paid: [] };
+function ctTagSelHTML(field, options){
+  const opts = options.map(v=>{ const [bg,fg]=ctTagColor(v);
+    return `<div class="tagsel-opt" data-v="${escAttr(v)}"><span class="tagsel-chip" style="background:${bg};color:${fg}">${esc(v)}</span><span class="tagsel-ck">✓</span></div>`; }).join("");
+  return `<div class="tagsel" data-field="${field}"><div class="tagsel-box"><span class="tagsel-caret">▾</span></div><div class="tagsel-menu hidden">${opts}</div></div>`;
+}
+function ctRenderTagSel(field, options){
+  const root = document.querySelector(`#contractForm .tagsel[data-field="${field}"]`);
+  if(!root) return;
+  const box = root.querySelector(".tagsel-box"), caret = box.querySelector(".tagsel-caret");
+  box.querySelectorAll(".tagsel-chip").forEach(c=>c.remove());
+  ctSel[field].forEach(v=>{
+    const [bg,fg]=ctTagColor(v);
+    const s=document.createElement("span"); s.className="tagsel-chip"; s.style.background=bg; s.style.color=fg;
+    s.innerHTML = `${esc(v)}<i class="tagsel-x" title="移除">×</i>`;
+    s.querySelector(".tagsel-x").addEventListener("click", e=>{ e.stopPropagation(); ctSel[field]=ctSel[field].filter(x=>x!==v); ctRenderTagSel(field, options); });
+    box.insertBefore(s, caret);
+  });
+  root.querySelectorAll(".tagsel-opt").forEach(o=>o.classList.toggle("on", ctSel[field].includes(o.dataset.v)));
+}
+function ctInitTagSel(field, options){
+  const root = document.querySelector(`#contractForm .tagsel[data-field="${field}"]`);
+  if(!root) return;
+  const box = root.querySelector(".tagsel-box"), menu = root.querySelector(".tagsel-menu");
+  box.addEventListener("click", e=>{ if(e.target.closest(".tagsel-x")) return; menu.classList.toggle("hidden"); });
+  root.querySelectorAll(".tagsel-opt").forEach(o=>o.addEventListener("click", ()=>{
+    const v=o.dataset.v;
+    ctSel[field] = ctSel[field].includes(v) ? ctSel[field].filter(x=>x!==v) : [...ctSel[field], v];
+    ctRenderTagSel(field, options);
+  }));
+  ctRenderTagSel(field, options);
+}
+// 点击空白关闭所有标签下拉
+document.addEventListener("click", e=>{
+  if(e.target.closest(".tagsel")) return;
+  document.querySelectorAll(".tagsel-menu").forEach(m=>m.classList.add("hidden"));
+});
 
 async function openContractsView(){
   document.getElementById("viewProjects").classList.add("hidden");
@@ -3013,8 +3104,9 @@ function renderContracts(){
     const payMoney = `<div class="ct-sub">${stages.map(([k,lab,pf])=>{
       const pct=c[pf]||0; if(!pct) return ""; return c.amountHidden?`${lab} ****`:`${lab} ${ctMoney(c.amount*pct/100)}`;
     }).filter(Boolean).join(" · ")}</div>`;
-    const invChips = [...invSet].map(s=>`<span class="ct-chip inv">票·${esc(s)}</span>`).join("");
-    const paidChips = [...paidSet].map(s=>`<span class="ct-chip paid">款·${esc(s)}</span>`).join("");
+    const tagChip = (s,prefix)=>{ const [bg,fg]=ctTagColor(s); return `<span class="ct-chip" style="background:${bg};color:${fg}">${prefix}${esc(s)}</span>`; };
+    const invChips = [...invSet].map(s=>tagChip(s,"票·")).join("");
+    const paidChips = [...paidSet].map(s=>tagChip(s,"款·")).join("");
     const dates = [c.startDate,c.endDate].filter(Boolean).join(" ~ ") || "<span class='ct-sub'>—</span>";
     return `<tr data-cid="${escAttr(c.id)}">
       <td><div><b>${esc(c.name)||"<i class='ct-sub'>未命名</i>"}</b></div><div class="ct-sub">${esc(c.code)||""}</div></td>
@@ -3051,55 +3143,97 @@ async function loadContractFiles(cid){
       const n = files.filter(x=>x.category===f.category).length;
       const label = (CT_CATNAME[f.category]||f.category) + (n>1?("·"+catIdx[f.category]):"");
       if(f.ready){
-        return `<a class="ct-file" href="/api/contracts/files/${encodeURIComponent(f.id)}/raw" target="_blank" rel="noopener" title="${escAttr(f.filename)}（点击查看）">📎${esc(label)}</a>`;
+        return `<a class="ct-file" href="/api/contracts/files/${encodeURIComponent(f.id)}/raw" target="_blank" rel="noopener" data-fid="${escAttr(f.id)}" data-fname="${escAttr(f.filename)}" data-mime="${escAttr(f.mimetype||"")}" title="${escAttr(f.filename)}（点击预览）">📎${esc(label)}</a>`;
       }
       return `<span class="ct-file pending" title="${escAttr(f.filename)}（待上传到云存储）">📎${esc(label)}</span>`;
     }).join("");
   }catch(e){ box.innerHTML=""; }
+}
+// 点击附件 → 应用内预览（左键预览；Ctrl/⌘+左键或中键仍新标签打开）
+document.getElementById("contractsWrap").addEventListener("click", e=>{
+  const a = e.target.closest("a.ct-file[data-fid]");
+  if(!a) return;
+  if(e.metaKey || e.ctrlKey || e.button===1) return;
+  e.preventDefault();
+  openFilePreview(a.dataset.fid, a.dataset.fname, a.dataset.mime);
+});
+function openFilePreview(fid, fname, mime){
+  const url = `/api/contracts/files/${encodeURIComponent(fid)}/raw`;
+  document.getElementById("fpName").textContent = fname || "附件";
+  document.getElementById("fpDownload").href = url + "?dl=1";
+  const body = document.getElementById("fpBody");
+  if(/^image\//.test(mime)){
+    body.innerHTML = `<img src="${url}" alt="${escAttr(fname)}">`;
+  }else if(mime==="application/pdf" || /\.pdf$/i.test(fname||"")){
+    body.innerHTML = `<iframe src="${url}" title="${escAttr(fname)}"></iframe>`;
+  }else{
+    body.innerHTML = `<div class="fp-other">此类型无法预览（${esc(mime||"未知")}）<br><a class="act primary" href="${url}?dl=1">下载查看</a></div>`;
+  }
+  document.getElementById("filePreview").classList.remove("hidden");
+}
+function closeFilePreview(){
+  document.getElementById("filePreview").classList.add("hidden");
+  document.getElementById("fpBody").innerHTML = "";   // 停止加载/释放
 }
 function ctNum(v){ const n=parseFloat(v); return isFinite(n)?n:0; }
 async function openContractEditor(id){
   if(!isAdmin()){ return; }
   contractEditingId = id || null;
   const c = id ? contractsCache.find(x=>x.id===id) : null;
-  const kind = c ? c.kind : contractKind;
-  const isPur = kind==="purchase";
-  document.getElementById("contractModalTitle").textContent = (id?"编辑":"新建") + (isPur?"采购合同":"销售合同");
+  ctSel = {
+    inv:  (c?.invoiced||"").split(",").map(s=>s.trim()).filter(Boolean),
+    paid: (c?.paid||"").split(",").map(s=>s.trim()).filter(Boolean),
+  };
+  const data = c ? {
+    name:c.name, code:c.code, projectId:c.projectId, partyA:c.partyA, partyB:c.partyB,
+    amount:c.amount, status:c.status, startDate:c.startDate, endDate:c.endDate, note:c.note,
+    pctPrepay:c.pctPrepay, pctDelivery:c.pctDelivery, pctStage1:c.pctStage1, pctStage2:c.pctStage2, pctFinal:c.pctFinal,
+  } : {};
+  renderContractForm(c ? c.kind : contractKind, data);
   document.getElementById("contractDelBtn").style.display = id ? "" : "none";
-  // 项目下拉来自 projectList
+  document.getElementById("contractModal").classList.remove("hidden");
+}
+// 读取当前表单（用于切换合同类型时保留已填内容）
+function readContractForm(){
+  const g=id=>document.getElementById(id);
+  const o={ name:g("ctName").value, code:g("ctCode").value, projectId:g("ctProject").value,
+    partyA:g("ctPartyA").value, partyB:g("ctPartyB").value, amount:g("ctAmount").value,
+    status:g("ctStatus").value, startDate:g("ctStart").value, endDate:g("ctEnd").value, note:g("ctNote").value };
+  document.querySelectorAll("#contractForm .ctPct").forEach(inp=>o[inp.dataset.pk]=inp.value);
+  return o;
+}
+function renderContractForm(kind, c){
+  const isPur = kind==="purchase";
+  document.getElementById("contractModalTitle").textContent = (contractEditingId?"编辑":"新建") + (isPur?"采购合同":"销售合同");
   const projOpts = `<option value="">（不关联项目）</option>` +
-    (projectList||[]).map(p=>`<option value="${escAttr(p.id)}" ${c&&c.projectId===p.id?'selected':''}>${esc(p.name)}</option>`).join("");
-  const invList = isPur ? CT_INVOICE_PURCHASE : CT_INVOICE_SALES;
-  const payList = invList;
-  const invSet = new Set((c?.invoiced||"").split(",").map(s=>s.trim()).filter(Boolean));
-  const paidSet = new Set((c?.paid||"").split(",").map(s=>s.trim()).filter(Boolean));
+    (projectList||[]).map(p=>`<option value="${escAttr(p.id)}" ${c.projectId===p.id?'selected':''}>${esc(p.name)}</option>`).join("");
   const stages = isPur
     ? [["pctPrepay","预付款"],["pctDelivery","发货款"],["pctFinal","尾款"]]
     : [["pctPrepay","预付款"],["pctStage1","阶段一验收款"],["pctStage2","阶段二验收款"],["pctFinal","尾款"]];
   const f = document.getElementById("contractForm");
   f.innerHTML = `
-    <input type="hidden" id="ctKind" value="${kind}">
     <div class="ct-form-grid">
-      <div class="ct-field full"><label>合同名称</label><input id="ctName" value="${escAttr(c?.name||"")}"></div>
-      <div class="ct-field"><label>合同编号</label><input id="ctCode" value="${escAttr(c?.code||"")}"></div>
+      <div class="ct-field"><label>合同类型</label><select id="ctKind">
+        <option value="purchase" ${isPur?'selected':''}>采购合同</option>
+        <option value="sales" ${!isPur?'selected':''}>销售合同</option></select></div>
+      <div class="ct-field"><label>合同状态</label><select id="ctStatus">${CT_STATUS.map(s=>`<option ${c.status===s?'selected':''}>${s}</option>`).join("")}</select></div>
+      <div class="ct-field full"><label>合同名称</label><input id="ctName" value="${escAttr(c.name||"")}"></div>
+      <div class="ct-field"><label>合同编号</label><input id="ctCode" value="${escAttr(c.code||"")}"></div>
       <div class="ct-field"><label>所属项目（决定谁能看到此合同）</label><select id="ctProject">${projOpts}</select></div>
-      <div class="ct-field"><label>${isPur?"采购方":"客户公司"}</label><input id="ctPartyA" value="${escAttr(c?.partyA||"")}"></div>
-      <div class="ct-field"><label>${isPur?"供应商":"签订公司"}</label><input id="ctPartyB" value="${escAttr(c?.partyB||"")}"></div>
-      <div class="ct-field"><label>合同总金额（元）</label><input id="ctAmount" type="number" step="any" value="${c?.amount??""}"></div>
-      <div class="ct-field"><label>合同状态</label><select id="ctStatus">${CT_STATUS.map(s=>`<option ${c?.status===s?'selected':''}>${s}</option>`).join("")}</select></div>
+      <div class="ct-field"><label>${isPur?"采购方":"客户公司"}</label><input id="ctPartyA" value="${escAttr(c.partyA||"")}"></div>
+      <div class="ct-field"><label>${isPur?"供应商":"签订公司"}</label><input id="ctPartyB" value="${escAttr(c.partyB||"")}"></div>
+      <div class="ct-field full"><label>合同总金额（元）</label><input id="ctAmount" type="number" step="any" value="${c.amount??""}"></div>
       <div class="ct-field full"><label>款项比例（%）— 金额自动算</label>
         <div class="ct-pct-row" style="grid-template-columns:repeat(${stages.length},1fr)">
-          ${stages.map(([k,lab])=>`<div class="ct-pct-cell"><label>${lab}</label><input class="ctPct" data-pk="${k}" type="number" step="any" value="${c?.[k]??0}"><span class="calc" data-calc="${k}">¥0.00</span></div>`).join("")}
+          ${stages.map(([k,lab])=>`<div class="ct-pct-cell"><label>${lab}</label><input class="ctPct" data-pk="${k}" type="number" step="any" value="${c[k]??0}"><span class="calc" data-calc="${k}">¥0.00</span></div>`).join("")}
         </div>
         <div class="ct-pct-warn" id="ctPctWarn"></div>
       </div>
-      <div class="ct-field"><label>开始时间</label><input id="ctStart" type="date" value="${escAttr(c?.startDate||"")}"></div>
-      <div class="ct-field"><label>结束时间</label><input id="ctEnd" type="date" value="${escAttr(c?.endDate||"")}"></div>
-      <div class="ct-field full"><label>开票情况（多选）</label>
-        <div class="ct-pay">${invList.map(s=>`<label class="ct-chip" style="cursor:pointer"><input type="checkbox" class="ctInv" value="${escAttr(s)}" ${invSet.has(s)?'checked':''}> ${s}</label>`).join("")}</div></div>
-      <div class="ct-field full"><label>付款情况（多选）</label>
-        <div class="ct-pay">${payList.map(s=>`<label class="ct-chip paid" style="cursor:pointer"><input type="checkbox" class="ctPaid" value="${escAttr(s)}" ${paidSet.has(s)?'checked':''}> ${s}</label>`).join("")}</div></div>
-      <div class="ct-field full"><label>备注</label><textarea id="ctNote">${esc(c?.note||"")}</textarea></div>
+      <div class="ct-field"><label>开始时间</label><input id="ctStart" type="date" value="${escAttr(c.startDate||"")}"></div>
+      <div class="ct-field"><label>结束时间</label><input id="ctEnd" type="date" value="${escAttr(c.endDate||"")}"></div>
+      <div class="ct-field full"><label>开票情况（多选）</label>${ctTagSelHTML("inv", CT_INVOICE)}</div>
+      <div class="ct-field full"><label>付款情况（多选）</label>${ctTagSelHTML("paid", CT_PAID)}</div>
+      <div class="ct-field full"><label>备注</label><textarea id="ctNote">${esc(c.note||"")}</textarea></div>
     </div>`;
   const recalc = ()=>{
     const amt = ctNum(document.getElementById("ctAmount").value);
@@ -3115,7 +3249,9 @@ async function openContractEditor(id){
   f.querySelector("#ctAmount").addEventListener("input", recalc);
   f.querySelectorAll(".ctPct").forEach(inp=>inp.addEventListener("input", recalc));
   recalc();
-  document.getElementById("contractModal").classList.remove("hidden");
+  ctInitTagSel("inv", CT_INVOICE);
+  ctInitTagSel("paid", CT_PAID);
+  document.getElementById("ctKind").addEventListener("change", e=>renderContractForm(e.target.value, readContractForm()));
 }
 function closeContractEditor(){ document.getElementById("contractModal").classList.add("hidden"); contractEditingId=null; }
 async function saveContract(){
@@ -3132,8 +3268,8 @@ async function saveContract(){
     startDate: document.getElementById("ctStart").value,
     endDate: document.getElementById("ctEnd").value,
     note: document.getElementById("ctNote").value.trim(),
-    invoiced: [...f.querySelectorAll(".ctInv:checked")].map(x=>x.value).join(","),
-    paid: [...f.querySelectorAll(".ctPaid:checked")].map(x=>x.value).join(","),
+    invoiced: ctSel.inv.join(","),
+    paid: ctSel.paid.join(","),
   };
   f.querySelectorAll(".ctPct").forEach(inp=>{ body[inp.dataset.pk] = ctNum(inp.value); });
   if(!body.name){ alert("请填写合同名称"); return; }
@@ -3168,6 +3304,9 @@ document.getElementById("contractCancel").addEventListener("click", closeContrac
 document.getElementById("contractSave").addEventListener("click", saveContract);
 document.getElementById("contractDelBtn").addEventListener("click", deleteContract);
 document.getElementById("contractModal").addEventListener("click", e=>{ if(e.target.id==="contractModal") closeContractEditor(); });
+document.getElementById("fpClose").addEventListener("click", closeFilePreview);
+document.getElementById("filePreview").addEventListener("click", e=>{ if(e.target.id==="filePreview") closeFilePreview(); });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape" && !document.getElementById("filePreview").classList.contains("hidden")) closeFilePreview(); });
 document.getElementById("memberModalClose").addEventListener("click", closeMemberModal);
 document.getElementById("memberModalDone").addEventListener("click", closeMemberModal);
 document.getElementById("memberModal").addEventListener("click", e=>{ if(e.target.id==="memberModal") closeMemberModal(); });
