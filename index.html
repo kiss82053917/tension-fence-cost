@@ -225,9 +225,13 @@
   .modal-body{padding:14px 18px;overflow:auto;flex:1}
   .fx-input-row{display:grid;grid-template-columns:80px 1fr;gap:10px;align-items:center;margin-bottom:8px}
   .fx-input-row label{color:var(--muted);font-size:12px}
-  #fxInput{width:100%;padding:8px 10px;border:1.5px solid var(--brand);border-radius:6px;
-    font-family:Menlo,Consolas,"PingFang SC",monospace;font-size:13px;background:#fffef2}
+  #fxInput{width:100%;min-height:38px;padding:6px 9px;border:1.5px solid var(--brand);border-radius:6px;
+    font-size:13px;background:#fffef2;line-height:2;white-space:pre-wrap;word-break:break-word;cursor:text}
   #fxInput:focus{outline:none;border-color:var(--brand-2);background:#fff}
+  #fxInput:empty:before{content:"点下面的参数和运算符拼公式…";color:#bbb;pointer-events:none}
+  .fx-tok{display:inline-block;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;
+    border-radius:5px;padding:0 7px;margin:1px 2px;font-size:12.5px;line-height:1.65;
+    white-space:nowrap;user-select:none;vertical-align:1px}
   .fx-result-row{display:flex;align-items:center;gap:8px;margin:6px 0 12px;font-size:13px}
   .fx-result-row b{color:var(--ok);font-size:16px;font-variant-numeric:tabular-nums}
   .fx-err{color:var(--bad);font-size:12px}
@@ -701,7 +705,7 @@
       <div class="fx-intro">填「这一项<b>每套设备要用几个</b>」。可以直接打数字（比如 <b>6</b>），也可以点下面的<b>蓝/绿色按钮</b>把参数加进来，中间用 <b>＋ − × ÷</b> 连接。下面会<b>实时算给你看</b>。</div>
       <div class="fx-input-row">
         <label>数量公式</label>
-        <input id="fxInput" type="text" spellcheck="false" autocomplete="off">
+        <div id="fxInput" contenteditable="true" spellcheck="false" role="textbox"></div>
       </div>
       <div class="fx-result-row">
         <span>这台设备算出来：</span><b id="fxResult">—</b><span>个</span>
@@ -2170,7 +2174,7 @@ function openFx(state){
   }
   document.getElementById("fxTitle").textContent = title;
   document.getElementById("fxSub").textContent   = sub;
-  fxInput.value     = humanizeFormula(currentSrc);
+  fxSet(humanizeFormula(currentSrc));
   fxDefault.textContent = humanizeFormula(defaultSrc);
   renderFxVars();
   updateFxResult();
@@ -2222,29 +2226,72 @@ function renderFxVars(){
   /* 绑定 */
   fxModal.querySelectorAll("#fxVars [data-ins]").forEach(c=>c.addEventListener("click", ()=>insertAtCursor(fxInput, c.dataset.ins)));
   fxModal.querySelectorAll("#fxOps [data-op]").forEach(b=>b.addEventListener("click", ()=>insertAtCursor(fxInput, b.dataset.op)));
-  fxModal.querySelectorAll(".fx-preset").forEach(b=>b.addEventListener("click", ()=>{ fxInput.value = b.dataset.fill; fxInput.focus(); updateFxResult(); }));
+  fxModal.querySelectorAll(".fx-preset").forEach(b=>b.addEventListener("click", ()=>{ fxSet(b.dataset.fill); fxInput.focus(); }));
   fxModal.querySelector("#fxOps [data-back]").addEventListener("click", ()=>{
-    fxInput.value = fxInput.value.replace(/\s*(?:[^\s×÷+\-*/()]+|[×÷+\-*/()])\s*$/, "");
+    const last = fxInput.lastChild;
+    if(last){
+      if(last.nodeType === 1){ last.remove(); }               // 整块删掉标签
+      else if(last.nodeType === 3){
+        let t = last.nodeValue.replace(/\s+$/, ""); t = t.slice(0, -1).replace(/\s+$/, "");
+        if(t) last.nodeValue = t; else last.remove();
+      }
+    }
     fxInput.focus(); updateFxResult();
   });
-  fxModal.querySelector("#fxOps [data-clear]").addEventListener("click", ()=>{ fxInput.value = ""; fxInput.focus(); updateFxResult(); });
+  fxModal.querySelector("#fxOps [data-clear]").addEventListener("click", ()=>{ fxSet(""); fxInput.focus(); });
 }
-function insertAtCursor(input, text){
-  input.focus();
-  const s = input.selectionStart ?? input.value.length;
-  const e = input.selectionEnd ?? input.value.length;
-  const before = input.value.slice(0, s);
-  const after  = input.value.slice(e);
-  const pad = (before && !/[\s+\-*/(（]$/.test(before)) ? " " : "";
-  const padAfter = (after && !/^[\s+\-*/)）]/.test(after)) ? " " : "";
-  input.value = before + pad + text + padAfter + after;
-  const pos = (before + pad + text).length;
-  input.setSelectionRange(pos, pos);
+/* ---- 公式输入框：变量名做成不可拆分的标签（删除整块删，避免删半个字出错） ---- */
+function fxVarNames(){
+  const names = [];
+  Object.keys(DERIVED_CN).forEach(k=>names.push(DERIVED_CN[k]));
+  Object.keys(DEFAULT_PARAMS).forEach(k=>names.push(paramLabel(k)));
+  customParams.forEach(c=>{ if(c.key) names.push(c.label || c.key); });
+  return [...new Set(names.filter(Boolean))].sort((a,b)=>b.length-a.length);
+}
+function isVarName(t){ return /^防区\d+长度$/.test(t) || fxVarNames().includes(t); }
+function fxMakeChip(name){
+  const s = document.createElement("span");
+  s.className = "fx-tok"; s.setAttribute("contenteditable","false"); s.textContent = name;
+  return s;
+}
+function fxTokenize(str){
+  const names = fxVarNames(); const out = []; let i = 0, buf = "";
+  const flush = ()=>{ if(buf){ out.push({text:buf}); buf = ""; } };
+  while(i < str.length){
+    let m = /^防区\d+长度/.exec(str.slice(i)), matched = m ? m[0] : null;
+    if(!matched){ for(const nm of names){ if(str.startsWith(nm, i)){ matched = nm; break; } } }
+    if(matched){ flush(); out.push({chip:matched}); i += matched.length; }
+    else { buf += str[i]; i++; }
+  }
+  flush();
+  return out;
+}
+function fxSet(str){
+  fxInput.innerHTML = "";
+  fxTokenize(String(str||"")).forEach(t=>{
+    fxInput.appendChild(t.chip ? fxMakeChip(t.chip) : document.createTextNode(t.text));
+  });
+  updateFxResult();
+}
+function fxGet(){ return (fxInput.textContent || "").replace(/ /g, " "); }
+function insertAtCursor(_input, text){
+  fxInput.focus();
+  const node = isVarName(text) ? fxMakeChip(text) : document.createTextNode(text);
+  const sel = window.getSelection();
+  let range;
+  if(sel && sel.rangeCount && fxInput.contains(sel.anchorNode)){
+    range = sel.getRangeAt(0); range.deleteContents();
+  }else{
+    range = document.createRange(); range.selectNodeContents(fxInput); range.collapse(false);
+  }
+  range.insertNode(node);
+  range.setStartAfter(node); range.collapse(true);
+  if(sel){ sel.removeAllRanges(); sel.addRange(range); }
   updateFxResult();
 }
 function updateFxResult(){
   const scope = buildScope(activeEquip());
-  const r = evalFormulaErr(dehumanizeFormula(fxInput.value), scope);
+  const r = evalFormulaErr(dehumanizeFormula(fxGet()), scope);
   if(r.ok){
     fxResult.textContent = fmtQty(Math.max(0, r.value));
     fxResult.style.color = "var(--ok)";
@@ -2256,15 +2303,37 @@ function updateFxResult(){
   }
 }
 fxInput.addEventListener("input", updateFxResult);
+fxInput.addEventListener("paste", e=>{           // 粘贴只取纯文本，避免带入 HTML
+  e.preventDefault();
+  const t = (e.clipboardData || window.clipboardData).getData("text");
+  const sel = window.getSelection();
+  if(sel && sel.rangeCount && fxInput.contains(sel.anchorNode)){
+    const r = sel.getRangeAt(0); r.deleteContents();
+    const node = document.createTextNode(t); r.insertNode(node);
+    r.setStartAfter(node); r.collapse(true); sel.removeAllRanges(); sel.addRange(r);
+  }else{ fxInput.appendChild(document.createTextNode(t)); }
+  updateFxResult();
+});
 fxInput.addEventListener("keydown", e=>{
-  if(e.key === "Enter"){ e.preventDefault(); document.getElementById("fxSave").click(); }
-  else if(e.key === "Escape"){ closeFx(); }
+  if(e.key === "Enter"){ e.preventDefault(); document.getElementById("fxSave").click(); return; }
+  if(e.key === "Escape"){ closeFx(); return; }
+  if(e.key === "Backspace"){                      // 光标在标签后 → 整块删掉标签
+    const sel = window.getSelection();
+    if(sel && sel.isCollapsed && sel.rangeCount){
+      const r = sel.getRangeAt(0); let prev = null;
+      if(r.startContainer === fxInput) prev = fxInput.childNodes[r.startOffset - 1];
+      else if(r.startContainer.nodeType === 3 && r.startOffset === 0) prev = r.startContainer.previousSibling;
+      if(prev && prev.nodeType === 1 && prev.classList.contains("fx-tok")){
+        e.preventDefault(); prev.remove(); updateFxResult();
+      }
+    }
+  }
 });
 document.getElementById("fxClose").addEventListener("click", closeFx);
 document.getElementById("fxCancel").addEventListener("click", closeFx);
 document.getElementById("fxSave").addEventListener("click", ()=>{
   if(!fxState) return;
-  const src = dehumanizeFormula(fxInput.value.trim());
+  const src = dehumanizeFormula(fxGet().trim());
   if(fxState.kind === "sys"){
     if(!src || src === DEFAULT_FORMULAS[fxState.i]) delete formulaOverrides[fxState.i];
     else formulaOverrides[fxState.i] = src;
@@ -2282,10 +2351,10 @@ document.getElementById("fxSave").addEventListener("click", ()=>{
 document.getElementById("fxReset").addEventListener("click", ()=>{
   if(!fxState) return;
   if(fxState.kind === "sys"){
-    fxInput.value = humanizeFormula(DEFAULT_FORMULAS[fxState.i]);
+    fxSet(humanizeFormula(DEFAULT_FORMULAS[fxState.i]));
   }else{
     delete customItems[fxState.i].qtyFormula;
-    fxInput.value = humanizeFormula(String(customItems[fxState.i].qty || 0));
+    fxSet(humanizeFormula(String(customItems[fxState.i].qty || 0)));
   }
   updateFxResult();
 });
